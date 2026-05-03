@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { db, type Task, type Goal } from '../db';
-import { Plus, X, CheckCircle2, Circle, Clock, ArrowRight, Filter, Repeat, Zap } from 'lucide-react';
+import { Plus, X, CheckCircle2, Circle, Clock, ArrowRight, Filter, Repeat, Zap, ArrowUpDown } from 'lucide-react';
 
 type FilterStatus = 'all' | 'todo' | 'in_progress' | 'done';
+type SortOrder = 'default' | 'priorityDesc' | 'priorityAsc';
 
 const STATUS_LABELS: Record<string, string> = {
   todo: '待办',
@@ -28,6 +29,12 @@ const PRIORITY_COLORS: Record<number, string> = {
   3: 'bg-red-100 text-red-600',
 };
 
+const SORT_LABELS: Record<SortOrder, string> = {
+  default: '默认排序',
+  priorityDesc: '优先级 ↓',
+  priorityAsc: '优先级 ↑',
+};
+
 export default function TaskView() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -35,6 +42,7 @@ export default function TaskView() {
   const [editing, setEditing] = useState<Task | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [showFilter, setShowFilter] = useState(false);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('default');
 
   const [title, setTitle] = useState('');
   const [goalId, setGoalId] = useState<number | undefined>(undefined);
@@ -113,6 +121,13 @@ export default function TaskView() {
 
   const filteredTasks = tasks.filter(t => filter === 'all' || t.status === filter);
 
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    if (sortOrder === 'priorityDesc') return b.priority - a.priority;
+    if (sortOrder === 'priorityAsc') return a.priority - b.priority;
+    // default: keep original order (newest first)
+    return 0;
+  });
+
   const stats = {
     total: tasks.length,
     done: tasks.filter(t => t.status === 'done').length,
@@ -143,9 +158,9 @@ export default function TaskView() {
           <span className="text-gray-400">待办: {stats.todo}</span>
         </div>
 
-        {/* Filter chips */}
+        {/* Filter & Sort chips */}
         {showFilter && (
-          <div className="flex gap-2 mt-2">
+          <div className="flex flex-wrap gap-2 mt-2">
             {(['all', 'todo', 'in_progress', 'done'] as FilterStatus[]).map(f => (
               <button key={f} onClick={() => setFilter(f)}
                       className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -154,19 +169,28 @@ export default function TaskView() {
                 {f === 'all' ? '全部' : STATUS_LABELS[f]}
               </button>
             ))}
+            <button onClick={() => {
+              const orders: SortOrder[] = ['default', 'priorityDesc', 'priorityAsc'];
+              const idx = orders.indexOf(sortOrder);
+              setSortOrder(orders[(idx + 1) % orders.length]);
+            }}
+                    className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-600 flex items-center gap-1">
+              <ArrowUpDown size={12} />
+              {SORT_LABELS[sortOrder]}
+            </button>
           </div>
         )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {filteredTasks.length === 0 && (
+        {sortedTasks.length === 0 && (
           <div className="text-center text-gray-400 mt-20">
             <CheckCircle2 size={48} className="mx-auto mb-3 opacity-40" />
             <p>没有任务</p>
           </div>
         )}
 
-        {filteredTasks.map(task => {
+        {sortedTasks.map(task => {
           const goal = goals.find(g => g.id === task.goalId);
           return (
             <div key={task.id}

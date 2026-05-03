@@ -376,28 +376,8 @@ export default function ScheduleView() {
                     {style.height > 30 && lesson.location && (
                       <div className={`truncate opacity-80 ${isDone ? 'line-through' : ''}`}>{lesson.location}</div>
                     )}
-                    {/* Complete button for task-linked lessons */}
-                    {lesson.taskId && !isDone && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (lesson.taskId) {
-                            db.tasks.update(lesson.taskId, {
-                              status: 'done',
-                              completedAt: new Date().toISOString(),
-                            }).then(() => loadTasks());
-                          }
-                        }}
-                        className="absolute top-0.5 right-0.5 w-4 h-4 bg-white/40 hover:bg-white/70 rounded-full flex items-center justify-center"
-                        title="标记完成"
-                      >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      </button>
-                    )}
                     {isDone && (
-                      <div className="absolute top-0.5 right-0.5 text-[8px] bg-white/30 px-1 rounded">已完成</div>
+                      <div className="absolute top-0.5 right-0.5 text-[8px] bg-white/30 px-1 rounded">✓ 已完成</div>
                     )}
                   </div>
                 );
@@ -478,7 +458,27 @@ export default function ScheduleView() {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-5">
+            {/* 标记完成按钮（仅编辑模式下，且有关联任务且未完成） */}
+            {editing && editing.taskId && allTasksRef.find(t => t.id === editing.taskId)?.status !== 'done' && (
+              <button
+                onClick={() => {
+                  if (editing.taskId) {
+                    db.tasks.update(editing.taskId, {
+                      status: 'done',
+                      completedAt: new Date().toISOString(),
+                    }).then(() => {
+                      loadTasks();
+                      setShowForm(false);
+                    });
+                  }
+                }}
+                className="w-full mt-4 py-3 rounded-xl bg-green-500 text-white font-bold text-sm shadow-sm active:scale-[0.98] transition-transform"
+              >
+                ✓ 标记这节课为已完成
+              </button>
+            )}
+
+            <div className="flex gap-3 mt-4">
               {editing && (
                 <button onClick={deleteLesson}
                         className="px-4 py-2.5 rounded-xl text-red-600 bg-red-50 font-medium">
