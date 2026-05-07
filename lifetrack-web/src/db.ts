@@ -39,10 +39,12 @@ export interface Lesson {
   durationMinutes: number;
   color: string;
   location?: string;
-  isRecurring: boolean;
-  startDate?: string; // for recurring lessons
-  endDate?: string;   // for recurring lessons
-  date?: string;      // for non-recurring lessons: the specific date it occurs
+  repeatDays?: number[]; // e.g. [1,3,5] for Mon/Wed/Fri; undefined/empty = not repeating
+  startDate?: string;    // repeat start date
+  endDate?: string;      // repeat end date
+  status: TaskStatus;    // kept for backward compat; use completedDates for per-day tracking
+  completedAt?: string;  // kept for backward compat
+  completedDates?: string[]; // ISO local dates when this lesson was marked done (per-day tracking for repeat lessons)
 }
 
 export interface SleepRecord {
@@ -119,7 +121,7 @@ export class LifeTrackDB extends Dexie {
 
   constructor() {
     super('LifeTrackDB');
-    this.version(5).stores({
+    this.version(8).stores({
       goals: '++id, createdAt',
       tasks: '++id, goalId, status, createdAt',
       lessons: '++id, dayOfWeek, taskId',
@@ -143,11 +145,43 @@ export async function seedData() {
   if (seeded) return;
   seeded = true;
 
-  // Migrate old lessons that lack `isRecurring` (from v2/v3 schema)
+  const today = new Date();
+  const dateRangeStart = formatLocalDate(new Date(today.getFullYear(), today.getMonth() - 2, today.getDate()));
+  const dateRangeEnd = formatLocalDate(new Date(today.getFullYear(), today.getMonth() + 2, today.getDate()));
+
+  // Migrate old lessons (from v2/v3/v5/v6/v7 schema)
   const allLessons = await db.lessons.toArray();
   for (const lesson of allLessons) {
-    if ((lesson as any).isRecurring === undefined) {
-      await db.lessons.update(lesson.id!, { isRecurring: true });
+    const updates: any = {};
+    if ((lesson as any).status === undefined) {
+      updates.status = 'todo';
+    }
+    // Migrate isRecurring/date → repeatDays
+    if ((lesson as any).repeatDays === undefined) {
+      const oldDate = (lesson as any).date;
+      const oldIsRecurring = (lesson as any).isRecurring;
+      if (oldDate) {
+        const d = new Date(oldDate + 'T00:00:00');
+        updates.repeatDays = [d.getDay()];
+      } else {
+        updates.repeatDays = [lesson.dayOfWeek];
+      }
+      if (oldIsRecurring && !lesson.startDate) {
+        updates.startDate = dateRangeStart;
+        updates.endDate = dateRangeEnd;
+      }
+    }
+    // Migrate completedAt → completedDates (per-day tracking)
+    if ((lesson as any).completedDates === undefined) {
+      if (lesson.status === 'done' && lesson.completedAt) {
+        const doneDate = lesson.completedAt.slice(0, 10);
+        updates.completedDates = [doneDate];
+      } else {
+        updates.completedDates = [];
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      await db.lessons.update(lesson.id!, updates);
     }
   }
 
@@ -186,10 +220,6 @@ export async function seedData() {
   const goalCount = await db.goals.count();
   if (goalCount > 0) return;
 
-  const today = new Date();
-  const dateRangeStart = formatLocalDate(new Date(today.getFullYear(), today.getMonth() - 2, today.getDate()));
-  const dateRangeEnd = formatLocalDate(new Date(today.getFullYear(), today.getMonth() + 2, today.getDate()));
-
   // Seed demo goals
   await db.goals.bulkAdd([
     { title: '学好英语', description: '每天背单词，练听力', createdAt: new Date().toISOString(), color: '#4A6FA5' },
@@ -198,10 +228,10 @@ export async function seedData() {
 
   // Seed demo lessons
   await db.lessons.bulkAdd([
-    { title: '英语课', dayOfWeek: 1, startHour: 9, startMinute: 0, durationMinutes: 90, color: '#4A6FA5', location: '教室A', isRecurring: true, startDate: dateRangeStart, endDate: dateRangeEnd },
-    { title: '数学课', dayOfWeek: 2, startHour: 10, startMinute: 30, durationMinutes: 90, color: '#FF6B6B', location: '教室B', isRecurring: true, startDate: dateRangeStart, endDate: dateRangeEnd },
-    { title: '体育课', dayOfWeek: 3, startHour: 14, startMinute: 0, durationMinutes: 60, color: '#34C759', location: '体育馆', isRecurring: true, startDate: dateRangeStart, endDate: dateRangeEnd },
-    { title: '物理课', dayOfWeek: 4, startHour: 9, startMinute: 0, durationMinutes: 90, color: '#FF9500', location: '实验室', isRecurring: true, startDate: dateRangeStart, endDate: dateRangeEnd },
+    { title: '英语课', dayOfWeek: 1, startHour: 9, startMinute: 0, durationMinutes: 90, color: '#4A6FA5', location: '教室A', repeatDays: [1], startDate: dateRangeStart, endDate: dateRangeEnd, status: 'todo' },
+    { title: '数学课', dayOfWeek: 2, startHour: 10, startMinute: 30, durationMinutes: 90, color: '#FF6B6B', location: '教室B', repeatDays: [2], startDate: dateRangeStart, endDate: dateRangeEnd, status: 'todo' },
+    { title: '体育课', dayOfWeek: 3, startHour: 14, startMinute: 0, durationMinutes: 60, color: '#34C759', location: '体育馆', repeatDays: [3], startDate: dateRangeStart, endDate: dateRangeEnd, status: 'todo' },
+    { title: '物理课', dayOfWeek: 4, startHour: 9, startMinute: 0, durationMinutes: 90, color: '#FF9500', location: '实验室', repeatDays: [4], startDate: dateRangeStart, endDate: dateRangeEnd, status: 'todo' },
   ]);
 
   // Seed demo tasks

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { db, type Task, type Lesson, type SleepRecord, type FocusSession, type MoodEntry, type Habit, type HabitLog, type BadgeUnlock, formatLocalDate } from '../db';
-import { Trophy, Star, Zap, Sunrise, Moon, BedDouble, TrendingUp, Clock, CheckCircle2, Smile, ArrowLeft } from 'lucide-react';
+import { db, type Task, type Lesson, type SleepRecord, type FocusSession, type MoodEntry, type Habit, type HabitLog, type BadgeUnlock, type Goal, formatLocalDate } from '../db';
+import { Trophy, Star, Zap, Sunrise, Moon, BedDouble, TrendingUp, Clock, CheckCircle2, Smile, ArrowLeft, Target } from 'lucide-react';
 
 const BADGE_DEFS = [
   { id: 'first-task', name: '初出茅庐', desc: '完成第一个任务', icon: Star, color: '#F59E0B' },
@@ -11,6 +11,7 @@ const BADGE_DEFS = [
   { id: 'perfect-day', name: '全勤', desc: '单日完成所有习惯', icon: CheckCircle2, color: '#10B981' },
   { id: 'week-champ', name: '周冠军', desc: '一周完成 20 个任务', icon: Trophy, color: '#EC4899' },
   { id: 'streak-7', name: '连续 7 天', desc: '连续 7 天有完成任务', icon: TrendingUp, color: '#3B82F6' },
+  { id: 'goal-completed', name: '目标达成', desc: '某个目标下的所有任务全部完成', icon: Star, color: '#10B981' },
 ];
 
 export default function StatsView() {
@@ -21,13 +22,14 @@ export default function StatsView() {
   const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
   const [badgeUnlocks, setBadgeUnlocks] = useState<BadgeUnlock[]>([]);
   const [newBadges, setNewBadges] = useState<string[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
 
   useEffect(() => {
     loadData();
   }, []);
 
   async function loadData() {
-    const [t, l, s, f, m, h, hl, bu] = await Promise.all([
+    const [t, l, s, f, m, h, hl, bu, g] = await Promise.all([
       db.tasks.toArray(),
       db.lessons.toArray(),
       db.sleepRecords.toArray(),
@@ -36,6 +38,7 @@ export default function StatsView() {
       db.habits.toArray(),
       db.habitLogs.toArray(),
       db.badgeUnlocks.toArray(),
+      db.goals.toArray(),
     ]);
     setTasks(t);
     setLessons(l);
@@ -43,11 +46,12 @@ export default function StatsView() {
     setFocusSessions(f);
     setMoodEntries(m.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setBadgeUnlocks(bu);
+    setGoals(g);
 
     // Check for new badge unlocks
     const newlyUnlocked: string[] = [];
     for (const badge of BADGE_DEFS) {
-      if (!bu.some(b => b.badgeId === badge.id) && checkBadge(badge.id, t, s, f, h, hl)) {
+      if (!bu.some(b => b.badgeId === badge.id) && checkBadge(badge.id, t, s, f, h, hl, g)) {
         newlyUnlocked.push(badge.id);
       }
     }
@@ -64,7 +68,8 @@ export default function StatsView() {
     sleepRecords: SleepRecord[],
     focusSessions: FocusSession[],
     habits: Habit[],
-    habitLogs: HabitLog[]
+    habitLogs: HabitLog[],
+    goals: Goal[]
   ): boolean {
     const today = new Date();
     switch (badgeId) {
@@ -155,9 +160,26 @@ export default function StatsView() {
         }
         return false;
       }
+      case 'goal-completed': {
+        for (const goal of goals) {
+          const goalTasks = tasks.filter(t => t.goalId === goal.id);
+          if (goalTasks.length > 0 && goalTasks.every(t => t.status === 'done')) return true;
+        }
+        return false;
+      }
     }
     return false;
   }
+
+  // Goal completion stats
+  const goalStats = goals.map(goal => {
+    const goalTasks = tasks.filter(t => t.goalId === goal.id);
+    return { goal, total: goalTasks.length, completed: goalTasks.filter(t => t.status === 'done').length };
+  }).sort((a, b) => {
+    const aPct = a.total > 0 ? a.completed / a.total : 0;
+    const bPct = b.total > 0 ? b.completed / b.total : 0;
+    return bPct - aPct;
+  });
 
   // === Last 7 days data ===
   const last7Days: { date: string; label: string }[] = [];
@@ -168,11 +190,11 @@ export default function StatsView() {
 
   // Workload per day
   const workloadData = last7Days.map(({ date }) => {
-    const dayTasks = tasks.filter(t => t.status === 'done' && t.completedAt?.startsWith(date));
-    const ids = new Set(dayTasks.map(t => t.id));
-    const minutes = lessons.filter(l => l.taskId && ids.has(l.taskId)).reduce((s, l) => s + l.durationMinutes, 0);
-    const extra = dayTasks.filter(t => !lessons.some(l => l.taskId === t.id)).length * 60;
-    return (minutes + extra) / 60;
+    const dayLessons = lessons.filter(l => l.completedDates?.includes(date));
+    const lessonMinutes = dayLessons.reduce((s, l) => s + l.durationMinutes, 0);
+    const dayTasks = tasks.filter(t => t.status === 'done' && t.completedAt?.startsWith(date) && !lessons.some(l => l.taskId === t.id));
+    const extraMinutes = dayTasks.length * 60;
+    return (lessonMinutes + extraMinutes) / 60;
   });
 
   // Tasks done per day
@@ -351,6 +373,35 @@ export default function StatsView() {
                   <div className="text-[10px] text-gray-400 mt-0.5">{m.date.slice(5)}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Goal Completion */}
+        {goals.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center gap-2 mb-3">
+              <Target size={18} className="text-teal-500" />
+              <h2 className="font-semibold text-gray-900">目标完成度</h2>
+            </div>
+            <div className="space-y-3">
+              {goalStats.map(({ goal, total, completed }) => {
+                const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                return (
+                  <div key={goal.id}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: goal.color }} />
+                        <span className="text-sm font-medium text-gray-900">{goal.title}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">{completed}/{total} ({pct}%)</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: goal.color }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

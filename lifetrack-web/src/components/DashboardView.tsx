@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, type Goal, type Task, type Lesson, type SleepRecord, type Habit, type HabitLog, type MoodEntry, todayLocal } from '../db';
+import { db, type Goal, type Task, type Lesson, type SleepRecord, type Habit, type HabitLog, type MoodEntry, todayLocal, formatLocalDate } from '../db';
 import { Calendar, Target, ListTodo, Moon, ChevronRight, Clock, Star, Briefcase, CheckCircle2, Flame, Palette, Dumbbell, BarChart3, Smile } from 'lucide-react';
 
 interface Props {
@@ -145,12 +145,16 @@ export default function DashboardView({ onNavigate }: Props) {
 
   // Check if a lesson should appear on the given date
   function lessonVisibleOnDate(lesson: Lesson, date: Date): boolean {
-    if (lesson.dayOfWeek !== date.getDay()) return false;
-    if (!lesson.isRecurring) return true;
-    const dateStr = date.toISOString().split('T')[0];
-    if (lesson.startDate && dateStr < lesson.startDate) return false;
-    if (lesson.endDate && dateStr > lesson.endDate) return false;
-    return true;
+    const dateStr = formatLocalDate(date);
+    const day = date.getDay();
+    if (lesson.repeatDays && lesson.repeatDays.length > 0) {
+      if (!lesson.repeatDays.includes(day)) return false;
+      if (lesson.startDate && dateStr < lesson.startDate) return false;
+      if (lesson.endDate && dateStr > lesson.endDate) return false;
+      return true;
+    }
+    if (lesson.dayOfWeek === day) return true;
+    return false;
   }
 
   // Today's lessons
@@ -177,19 +181,25 @@ export default function DashboardView({ onNavigate }: Props) {
 
   // === Workload Stats ===
   const todayStr = todayLocal();
+
+  // Course time: completed lessons today (per-date tracking via completedDates)
+  const todayDoneLessons = lessons.filter(l =>
+    l.completedDates?.includes(todayStr)
+  );
+  const courseTimeMinutes = todayDoneLessons.reduce((sum, l) => sum + l.durationMinutes, 0);
+
+  // Project time: completed tasks without a lesson
   const todayDoneTasks = tasks.filter(t => {
     if (t.status !== 'done' || !t.completedAt) return false;
     return t.completedAt.startsWith(todayStr);
   });
-
-  const completedTaskIds = new Set(todayDoneTasks.map(t => t.id));
-  const todayWorkloadMinutes = lessons
-    .filter(l => l.taskId && completedTaskIds.has(l.taskId))
-    .reduce((sum, l) => sum + l.durationMinutes, 0);
-
   const tasksWithoutLessons = todayDoneTasks.filter(t => !lessons.some(l => l.taskId === t.id));
-  const estimatedExtraMinutes = tasksWithoutLessons.length * 60;
-  const totalWorkloadHours = ((todayWorkloadMinutes + estimatedExtraMinutes) / 60).toFixed(1);
+  const projectTimeMinutes = tasksWithoutLessons.length * 60;
+
+  const totalMinutes = courseTimeMinutes + projectTimeMinutes;
+  const courseTimeHours = (courseTimeMinutes / 60).toFixed(1);
+  const projectTimeHours = (projectTimeMinutes / 60).toFixed(1);
+  const totalWorkloadHours = (totalMinutes / 60).toFixed(1);
 
   const todayHabitLogs = habitLogs.filter(l => l.date === todayStr);
   const habitDoneCount = todayHabitLogs.length;
@@ -208,15 +218,12 @@ export default function DashboardView({ onNavigate }: Props) {
   }
 
   // Pie chart data
-  const pieData = todayDoneTasks
-    .map(task => {
-      const lesson = lessons.find(l => l.taskId === task.id);
-      return {
-        label: task.title.length > 6 ? task.title.slice(0, 6) + '…' : task.title,
-        value: lesson ? lesson.durationMinutes : 60,
-        color: lesson?.color || '#888888',
-      };
-    })
+  const pieData = todayDoneLessons
+    .map(lesson => ({
+      label: lesson.title.length > 6 ? lesson.title.slice(0, 6) + '…' : lesson.title,
+      value: lesson.durationMinutes,
+      color: lesson.color,
+    }))
     .filter(d => d.value > 0);
 
   function calcDuration(bed: string, wake: string): number {
@@ -311,41 +318,54 @@ export default function DashboardView({ onNavigate }: Props) {
           </button>
         </div>
 
-        {/* Workload Stats Card with Pie Chart */}
+        {/* Workload Stats Card */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center gap-2 mb-3">
             <Briefcase size={18} className="text-fuchsia-600" />
             <h2 className="font-semibold text-gray-900">今日工作量</h2>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-center shrink-0">
-              <div className="text-3xl font-bold text-gray-900">{totalWorkloadHours}</div>
-              <div className="text-xs text-gray-400">小时</div>
+          <div className="flex gap-3 mb-3">
+            <div className="flex-1 bg-blue-50 rounded-xl p-3 text-center">
+              <div className="text-xl font-bold text-blue-700">{courseTimeHours}</div>
+              <div className="text-[10px] text-blue-500">课程时间(h)</div>
             </div>
-            {pieData.length > 0 && <PieChart data={pieData} />}
+            <div className="flex-1 bg-orange-50 rounded-xl p-3 text-center">
+              <div className="text-xl font-bold text-orange-700">{projectTimeHours}</div>
+              <div className="text-[10px] text-orange-500">项目时间(h)</div>
+            </div>
+            <div className="flex-1 bg-purple-50 rounded-xl p-3 text-center">
+              <div className="text-xl font-bold text-purple-700">{totalWorkloadHours}</div>
+              <div className="text-[10px] text-purple-500">总时长(h)</div>
+            </div>
           </div>
 
-          {todayDoneTasks.length === 0 ? (
+          {pieData.length > 0 && <PieChart data={pieData} />}
+
+          {todayDoneLessons.length === 0 && tasksWithoutLessons.length === 0 ? (
             <p className="text-sm text-gray-400 mt-3">今天还没有完成任务，加油！💪</p>
           ) : (
             <div className="space-y-1.5 mt-3">
-              {todayDoneTasks.slice(0, 3).map(task => {
-                const linkedLesson = lessons.find(l => l.taskId === task.id);
-                return (
-                  <div key={task.id} className="flex items-center gap-2 text-sm">
-                    <CheckCircle2 size={14} className="text-green-500 shrink-0" />
-                    <span className="truncate">{task.title}</span>
-                    {linkedLesson && (
-                      <span className="text-xs text-gray-400 shrink-0">
-                        {formatDuration(linkedLesson.durationMinutes)}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-              {todayDoneTasks.length > 3 && (
-                <p className="text-xs text-gray-400 mt-1">还有 {todayDoneTasks.length - 3} 个任务…</p>
+              {todayDoneLessons.slice(0, 3).map(lesson => (
+                <div key={lesson.id} className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 size={14} className="text-green-500 shrink-0" />
+                  <span className="truncate">{lesson.title}</span>
+                  <span className="text-xs text-gray-400 shrink-0">
+                    {formatDuration(lesson.durationMinutes)}
+                  </span>
+                </div>
+              ))}
+              {tasksWithoutLessons.slice(0, Math.max(0, 3 - todayDoneLessons.length)).map(task => (
+                <div key={task.id} className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 size={14} className="text-green-500 shrink-0" />
+                  <span className="truncate">{task.title}</span>
+                  <span className="text-xs text-gray-400 shrink-0">60分钟</span>
+                </div>
+              ))}
+              {(todayDoneLessons.length + tasksWithoutLessons.length) > 3 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  还有 {todayDoneLessons.length + tasksWithoutLessons.length - 3} 个…
+                </p>
               )}
             </div>
           )}

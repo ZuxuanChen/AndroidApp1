@@ -52,7 +52,7 @@ export default function TaskView() {
   const [title, setTitle] = useState('');
   const [goalId, setGoalId] = useState<number | undefined>(undefined);
   const [priority, setPriority] = useState(2);
-  const [status, setStatus] = useState<Task['status']>('todo');
+  // Task status is auto-managed: todo -> in_progress (when scheduled) -> done (when completed)
   const [scheduleType, setScheduleType] = useState<Task['scheduleType']>('single');
   const [color, setColor] = useState(COLORS[0]);
   const [isRecurring, setIsRecurring] = useState(false);
@@ -78,7 +78,7 @@ export default function TaskView() {
       setTitle(task.title);
       setGoalId(task.goalId);
       setPriority(task.priority);
-      setStatus(task.status);
+      // status kept as-is, auto-managed by schedule/complete flow
       setScheduleType(task.scheduleType);
       setColor(task.color);
       setIsRecurring(task.isRecurring);
@@ -89,7 +89,7 @@ export default function TaskView() {
       setTitle('');
       setGoalId(undefined);
       setPriority(2);
-      setStatus('todo');
+      // new tasks always start as todo
       setScheduleType('single');
       setColor(COLORS[0]);
       setIsRecurring(false);
@@ -105,10 +105,10 @@ export default function TaskView() {
       title: title.trim() || '未命名任务',
       goalId: goalId || undefined,
       priority,
-      status,
+      status: editing?.status || 'todo',
       scheduleType,
       createdAt: editing?.createdAt || new Date().toISOString(),
-      completedAt: status === 'done' ? (editing?.completedAt || new Date().toISOString()) : undefined,
+      completedAt: editing?.completedAt,
       color,
       isRecurring,
       startDate: isRecurring ? startDate || undefined : undefined,
@@ -298,27 +298,20 @@ export default function TaskView() {
                 <select value={goalId || ''} onChange={e => setGoalId(e.target.value ? Number(e.target.value) : undefined)}
                         className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">无</option>
-                  {goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
+                  {goals.map(g => {
+                    const goalTasks = tasks.filter(t => t.goalId === g.id);
+                    const completed = goalTasks.filter(t => t.status === 'done').length;
+                    return <option key={g.id} value={g.id}>{g.title} ({completed}/{goalTasks.length})</option>;
+                  })}
                 </select>
               </div>
 
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="text-sm text-gray-500">优先级</label>
-                  <select value={priority} onChange={e => setPriority(Number(e.target.value))}
-                          className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg">
-                    {[3, 2, 1].map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="text-sm text-gray-500">状态</label>
-                  <select value={status} onChange={e => setStatus(e.target.value as Task['status'])}
-                          className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg">
-                    <option value="todo">待办</option>
-                    <option value="in_progress">进行中</option>
-                    <option value="done">已完成</option>
-                  </select>
-                </div>
+              <div>
+                <label className="text-sm text-gray-500">优先级</label>
+                <select value={priority} onChange={e => setPriority(Number(e.target.value))}
+                        className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg">
+                  {[3, 2, 1].map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+                </select>
               </div>
 
               <div>

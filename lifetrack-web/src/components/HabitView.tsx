@@ -7,6 +7,16 @@ const COLORS = [
   '#EC4899', '#06B6D4', '#F97316', '#84CC16', '#6366F1'
 ];
 
+const FUN_QUOTES = [
+  "不要骗自己哦～",
+  "穿越时空的打卡？",
+  "补卡成功，但时间都知道 😉",
+  "未来的你给现在的你点了个赞 👍",
+  "这次是真的哦？",
+  "打卡成功，记得下次准时！",
+  "时间旅行者认证成功 🚀",
+];
+
 export default function HabitView() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLog[]>([]);
@@ -14,12 +24,20 @@ export default function HabitView() {
   const [newName, setNewName] = useState('');
   const [newIcon, setNewIcon] = useState('⭐');
   const [newColor, setNewColor] = useState(COLORS[0]);
+  const [toast, setToast] = useState<string | null>(null);
 
   const today = todayLocal();
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   async function loadData() {
     const [h, l] = await Promise.all([db.habits.toArray(), db.habitLogs.toArray()]);
@@ -31,13 +49,24 @@ export default function HabitView() {
     return logs.some(l => l.habitId === habitId && l.date === date);
   }
 
-  async function toggleToday(habitId: number) {
-    const existing = logs.find(l => l.habitId === habitId && l.date === today);
+  async function toggleLog(habitId: number, date: string) {
+    if (date > today) {
+      alert('还不能给未来打卡哦 👀');
+      return;
+    }
+
+    const existing = logs.find(l => l.habitId === habitId && l.date === date);
     if (existing) {
       await db.habitLogs.delete(existing.id!);
     } else {
-      await db.habitLogs.add({ habitId, date: today });
+      await db.habitLogs.add({ habitId, date });
     }
+
+    if (date < today && !existing) {
+      const quote = FUN_QUOTES[Math.floor(Math.random() * FUN_QUOTES.length)];
+      setToast(quote);
+    }
+
     loadData();
   }
 
@@ -122,7 +151,7 @@ export default function HabitView() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => toggleToday(habit.id!)}
+                    onClick={() => toggleLog(habit.id!, today)}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
                       loggedToday
                         ? 'text-white'
@@ -144,7 +173,11 @@ export default function HabitView() {
                   const logged = isLogged(habit.id!, d.date);
                   const isToday = d.date === today;
                   return (
-                    <div key={d.date} className="flex flex-col items-center">
+                    <button
+                      key={d.date}
+                      onClick={() => toggleLog(habit.id!, d.date)}
+                      className="flex flex-col items-center"
+                    >
                       <div
                         className={`w-full aspect-square rounded-md ${isToday ? 'ring-2 ring-offset-1' : ''}`}
                         style={{
@@ -153,7 +186,7 @@ export default function HabitView() {
                         }}
                       />
                       <span className="text-[9px] text-gray-400 mt-0.5">{d.dayNum}</span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -166,13 +199,14 @@ export default function HabitView() {
       {showForm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center"
              onClick={() => setShowForm(false)}>
-          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl"
+          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto"
                onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">添加习惯</h2>
-              <button onClick={() => setShowForm(false)}><X size={20} className="text-gray-400" /></button>
-            </div>
-            <div className="space-y-3">
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold">添加习惯</h2>
+                <button onClick={() => setShowForm(false)}><X size={20} className="text-gray-400" /></button>
+              </div>
+              <div className="space-y-3">
               <div>
                 <label className="text-sm text-gray-500">习惯名称</label>
                 <input value={newName} onChange={e => setNewName(e.target.value)}
@@ -194,12 +228,20 @@ export default function HabitView() {
                   ))}
                 </div>
               </div>
+              <button onClick={addHabit}
+                      className="w-full mt-5 py-2.5 rounded-xl bg-blue-600 text-white font-medium">
+                添加
+              </button>
+              </div>
             </div>
-            <button onClick={addHabit}
-                    className="w-full mt-5 py-2.5 rounded-xl bg-blue-600 text-white font-medium">
-              添加
-            </button>
           </div>
+        </div>
+      )}
+
+      {/* Fun quote toast */}
+      {toast && (
+        <div className="fixed top-1/4 left-1/2 -translate-x-1/2 z-[60] bg-gray-900 text-white px-4 py-2 rounded-full text-sm shadow-lg animate-bounce">
+          {toast}
         </div>
       )}
 

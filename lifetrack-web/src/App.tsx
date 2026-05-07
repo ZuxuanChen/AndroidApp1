@@ -8,8 +8,9 @@ import TaskView from './components/TaskView';
 import SleepView from './components/SleepView';
 import HabitView from './components/HabitView';
 import StatsView from './components/StatsView';
+import SettingsView from './components/SettingsView';
 
-type Tab = 'dashboard' | 'schedule' | 'task' | 'goal' | 'sleep' | 'habit' | 'stats';
+type Tab = 'dashboard' | 'schedule' | 'task' | 'goal' | 'sleep' | 'habit' | 'stats' | 'settings';
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -49,6 +50,7 @@ function App() {
         {activeTab === 'sleep' && <SleepView />}
         {activeTab === 'habit' && <HabitView />}
         {activeTab === 'stats' && <StatsView />}
+        {activeTab === 'settings' && <SettingsView />}
       </main>
       <BottomNav active={activeTab} onChange={setActiveTab} />
     </div>

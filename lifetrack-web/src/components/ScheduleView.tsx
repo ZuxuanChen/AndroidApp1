@@ -16,16 +16,16 @@ const COLORS = [
 
 // Check if a lesson should appear on the given date
 function lessonVisibleOnDate(lesson: Lesson, date: Date): boolean {
-  if (lesson.dayOfWeek !== date.getDay()) return false;
   const dateStr = formatLocalDate(date);
-  if (!lesson.isRecurring) {
-    // Non-recurring: only show on its specific date
-    return lesson.date === dateStr;
+  const day = date.getDay();
+  if (lesson.repeatDays && lesson.repeatDays.length > 0) {
+    if (!lesson.repeatDays.includes(day)) return false;
+    if (lesson.startDate && dateStr < lesson.startDate) return false;
+    if (lesson.endDate && dateStr > lesson.endDate) return false;
+    return true;
   }
-  // Recurring: check date range
-  if (lesson.startDate && dateStr < lesson.startDate) return false;
-  if (lesson.endDate && dateStr > lesson.endDate) return false;
-  return true;
+  if (lesson.dayOfWeek === day) return true;
+  return false;
 }
 
 export default function ScheduleView() {
@@ -42,6 +42,8 @@ export default function ScheduleView() {
   const [monthOffset, setMonthOffset] = useState(0);
   const [showPomodoro, setShowPomodoro] = useState(false);
   const [pomodoroLesson, setPomodoroLesson] = useState<Lesson | null>(null);
+  const [pomodoroDuration, setPomodoroDuration] = useState(25);
+  const [editingDate, setEditingDate] = useState<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [dayOfWeek, setDayOfWeek] = useState(1);
@@ -50,9 +52,10 @@ export default function ScheduleView() {
   const [duration, setDuration] = useState(60);
   const [color, setColor] = useState(COLORS[0]);
   const [location, setLocation] = useState('');
-  const [isRecurring, setIsRecurring] = useState(false);
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [customPomodoro, setCustomPomodoro] = useState('');
 
   useEffect(() => {
     loadLessons();
@@ -105,7 +108,7 @@ export default function ScheduleView() {
   const daysInMonth = new Date(monthYear, monthIndex + 1, 0).getDate();
   const firstDayOfMonth = new Date(monthYear, monthIndex, 1).getDay();
 
-  function openForm(lesson?: Lesson) {
+  function openForm(lesson?: Lesson, date?: Date) {
     if (lesson) {
       setEditing(lesson);
       setTitle(lesson.title);
@@ -115,7 +118,7 @@ export default function ScheduleView() {
       setDuration(lesson.durationMinutes);
       setColor(lesson.color);
       setLocation(lesson.location || '');
-      setIsRecurring(lesson.isRecurring);
+      setRepeatDays(lesson.repeatDays || []);
       setStartDate(lesson.startDate || '');
       setEndDate(lesson.endDate || '');
     } else {
@@ -127,22 +130,16 @@ export default function ScheduleView() {
       setDuration(60);
       setColor(COLORS[0]);
       setLocation('');
-      setIsRecurring(false);
+      setRepeatDays([]);
       setStartDate('');
       setEndDate('');
     }
+    setEditingDate(date ? formatLocalDate(date) : null);
     setShowForm(true);
   }
 
   async function saveLesson() {
-    // Compute specific date for non-recurring lessons based on current week view
-    let lessonDate: string | undefined;
-    if (!isRecurring && !editing) {
-      lessonDate = formatLocalDate(weekDates[dayOfWeek]);
-    } else if (!isRecurring && editing) {
-      lessonDate = editing.date || formatLocalDate(weekDates[dayOfWeek]);
-    }
-    const data: Lesson = {
+    const data: any = {
       id: editing?.id,
       title: title.trim() || '未命名',
       dayOfWeek,
@@ -151,10 +148,11 @@ export default function ScheduleView() {
       durationMinutes: duration,
       color,
       location: location.trim() || undefined,
-      isRecurring,
-      startDate: isRecurring ? startDate || undefined : undefined,
-      endDate: isRecurring ? endDate || undefined : undefined,
-      date: lessonDate,
+      repeatDays: repeatDays.length > 0 ? repeatDays : undefined,
+      startDate: repeatDays.length > 1 ? startDate || undefined : undefined,
+      endDate: repeatDays.length > 1 ? endDate || undefined : undefined,
+      status: editing?.status || 'todo',
+      completedDates: editing?.completedDates || [],
     };
     if (editing?.id) {
       await db.lessons.update(editing.id, data);
@@ -192,10 +190,29 @@ export default function ScheduleView() {
     const goal = goals.find(g => g.id === task.goalId);
     setColor(goal?.color || COLORS[0]);
     setLocation('');
-    setIsRecurring(false);
+    setRepeatDays([]);
     setStartDate('');
     setEndDate('');
     setShowTaskPanel(false);
+    setShowTaskScheduleForm(true);
+  }
+
+  function openTaskScheduleFormWithDefaults(
+    task: Task,
+    defaults: { dayOfWeek: number; startHour: number; startMinute: number }
+  ) {
+    setSelectedTask(task);
+    setTitle(task.title);
+    setDayOfWeek(defaults.dayOfWeek);
+    setStartHour(defaults.startHour);
+    setStartMinute(defaults.startMinute);
+    setDuration(60);
+    const goal = goals.find(g => g.id === task.goalId);
+    setColor(goal?.color || COLORS[0]);
+    setLocation('');
+    setRepeatDays([defaults.dayOfWeek]);
+    setStartDate('');
+    setEndDate('');
     setShowTaskScheduleForm(true);
   }
 
@@ -207,13 +224,20 @@ export default function ScheduleView() {
       dayOfWeek,
       startHour,
       startMinute,
-      durationMinutes: 60,
+      durationMinutes: duration,
       color,
       location: location.trim() || undefined,
-      isRecurring: false,
-      date: formatLocalDate(weekDates[dayOfWeek]),
+      repeatDays: repeatDays.length > 0 ? repeatDays : undefined,
+      startDate: repeatDays.length > 1 ? startDate || undefined : undefined,
+      endDate: repeatDays.length > 1 ? endDate || undefined : undefined,
+      status: 'todo',
+      completedDates: [],
     };
     await db.lessons.add(data);
+    // Update task status to in_progress
+    if (selectedTask.id) {
+      await db.tasks.update(selectedTask.id, { status: 'in_progress' });
+    }
     setShowTaskScheduleForm(false);
     setSelectedTask(null);
     loadLessons();
@@ -269,9 +293,9 @@ export default function ScheduleView() {
         startHour: hour,
         startMinute: minute,
       };
-      // For non-recurring lessons, update the specific date to match new position
-      if (dragged && !dragged.isRecurring) {
-        update.date = formatLocalDate(weekDates[dayIdx]);
+      // If lesson has no repeatDays, set it to the new day's weekday
+      if (dragged && (!dragged.repeatDays || dragged.repeatDays.length === 0)) {
+        (update as any).repeatDays = [dayIdx];
       }
       await db.lessons.update(lessonId, update);
       loadLessons();
@@ -280,24 +304,14 @@ export default function ScheduleView() {
 
     if (type === 'task') {
       const taskId = Number(e.dataTransfer.getData('taskId'));
-      const taskTitle = e.dataTransfer.getData('taskTitle');
-      const goalIdStr = e.dataTransfer.getData('goalId');
-      const goal = goals.find(g => g.id === Number(goalIdStr));
-
-      await db.lessons.add({
-        taskId,
-        title: taskTitle,
-        dayOfWeek: dayIdx,
-        startHour: hour,
-        startMinute: minute,
-        durationMinutes: 60,
-        color: goal?.color || COLORS[0],
-        isRecurring: false,
-        date: formatLocalDate(weekDates[dayIdx]),
-      });
-
-      loadLessons();
-      loadTasks();
+      const draggedTask = tasks.find(t => t.id === taskId);
+      if (draggedTask) {
+        openTaskScheduleFormWithDefaults(draggedTask, {
+          dayOfWeek: dayIdx,
+          startHour: hour,
+          startMinute: minute,
+        });
+      }
     }
   }
 
@@ -309,7 +323,7 @@ export default function ScheduleView() {
     handleDropOnSlot(e, dayIdx, Math.max(0, Math.min(slotIdx, timeSlots.length - 1)));
   }
 
-  const allTasksRef = tasks;
+  // allTasksRef removed
   const undoneTasks = tasks.filter(t => {
     if (t.status === 'done') return false;
     if (t.scheduleType === 'single') {
@@ -450,14 +464,14 @@ export default function ScheduleView() {
                   {/* Lessons filtered by date range */}
                   {lessons.filter(l => lessonVisibleOnDate(l, weekDates[dayIdx])).map(lesson => {
                     const style = getLessonStyle(lesson);
-                    const linkedTask = lesson.taskId ? allTasksRef.find(t => t.id === lesson.taskId) : undefined;
-                    const isDone = linkedTask?.status === 'done';
+                    const dateStr = formatLocalDate(weekDates[dayIdx]);
+                    const isDone = lesson.completedDates?.includes(dateStr);
                     return (
                       <div
                         key={lesson.id}
                         draggable
                         onDragStart={(e) => handleLessonDragStart(e, lesson)}
-                        onClick={() => openForm(lesson)}
+                        onClick={() => openForm(lesson, weekDates[dayIdx])}
                         className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 text-left text-xs text-white overflow-hidden shadow-sm cursor-grab active:cursor-grabbing ${
                           isDone ? 'opacity-50' : ''
                         }`}
@@ -547,14 +561,15 @@ export default function ScheduleView() {
       {showForm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center"
              onClick={() => setShowForm(false)}>
-          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl"
+          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto"
                onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">{editing ? '编辑课程' : '添加课程'}</h2>
-              <button onClick={() => setShowForm(false)}><X size={20} className="text-gray-400" /></button>
-            </div>
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold">{editing ? '编辑事项' : '添加事项'}</h2>
+                <button onClick={() => setShowForm(false)}><X size={20} className="text-gray-400" /></button>
+              </div>
 
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+              <div className="space-y-3">
               <div>
                 <label className="text-sm text-gray-500">课程名称</label>
                 <input value={title} onChange={e => setTitle(e.target.value)}
@@ -602,26 +617,59 @@ export default function ScheduleView() {
                        className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
 
-              {/* Recurring option */}
+              {/* Repeat days */}
               <div className="bg-gray-50 rounded-lg p-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)}
-                         className="w-4 h-4 rounded border-gray-300 text-blue-600" />
-                  <span className="text-sm font-medium text-gray-700">每周重复</span>
-                </label>
-                {isRecurring && (
-                  <div className="flex gap-3 mt-2">
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-500">开始日期</label>
-                      <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                             className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm" />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700">重复频率</label>
+                  <button
+                    onClick={() => {
+                      if (repeatDays.length > 0) {
+                        setRepeatDays([]);
+                      } else {
+                        setRepeatDays([dayOfWeek]);
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      repeatDays.length > 0 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    🔁 重复
+                  </button>
+                </div>
+                {repeatDays.length > 0 && (
+                  <>
+                    <div className="flex gap-1">
+                      {['日','一','二','三','四','五','六'].map((label, idx) => (
+                        <button key={idx}
+                                onClick={() => {
+                                  if (repeatDays.includes(idx)) {
+                                    setRepeatDays(repeatDays.filter(d => d !== idx));
+                                  } else {
+                                    setRepeatDays([...repeatDays, idx].sort());
+                                  }
+                                }}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                  repeatDays.includes(idx) ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 border border-gray-200'
+                                }`}>
+                          {label}
+                        </button>
+                      ))}
                     </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-500">结束日期</label>
-                      <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                             className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm" />
-                    </div>
-                  </div>
+                    {repeatDays.length > 1 && (
+                      <div className="flex gap-3 mt-2">
+                        <div className="flex-1">
+                          <label className="text-xs text-gray-500">开始日期</label>
+                          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                                 className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm" />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-xs text-gray-500">结束日期</label>
+                          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                                 className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm" />
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -639,49 +687,93 @@ export default function ScheduleView() {
 
             {/* Start Pomodoro */}
             {editing && (
-              <button
-                onClick={() => {
-                  setShowForm(false);
-                  setPomodoroLesson(editing);
-                  setShowPomodoro(true);
-                }}
-                className="w-full mt-4 py-3 rounded-xl bg-purple-600 text-white font-bold text-sm shadow-sm active:scale-[0.98] transition-transform"
-              >
-                ▶ 开始专注 25 分钟
-              </button>
+              <div className="mt-4">
+                <div className="flex gap-2 mb-2">
+                  {[15, 25, 45, 60].map(m => (
+                    <button key={m}
+                            onClick={() => { setPomodoroDuration(m); setCustomPomodoro(''); }}
+                            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              pomodoroDuration === m && !customPomodoro ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-600'
+                            }`}>
+                      {m}分钟
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-gray-500">或自定义</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={180}
+                    value={customPomodoro}
+                    onChange={e => setCustomPomodoro(e.target.value)}
+                    placeholder={String(pomodoroDuration)}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded-lg text-sm text-center"
+                  />
+                  <span className="text-xs text-gray-500">分钟</span>
+                </div>
+                <button
+                  onClick={() => {
+                    const finalDuration = customPomodoro ? Math.min(180, Math.max(1, Number(customPomodoro))) : pomodoroDuration;
+                    setPomodoroDuration(finalDuration);
+                    setShowForm(false);
+                    setPomodoroLesson(editing);
+                    setShowPomodoro(true);
+                  }}
+                  className="w-full py-3 rounded-xl bg-purple-600 text-white font-bold text-sm shadow-sm active:scale-[0.98] transition-transform"
+                >
+                  ▶ 开始专注 {customPomodoro ? Math.min(180, Math.max(1, Number(customPomodoro))) : pomodoroDuration} 分钟
+                </button>
+              </div>
             )}
 
             {/* Complete button */}
-            {editing && editing.taskId && allTasksRef.find(t => t.id === editing.taskId)?.status !== 'done' && (
+            {editing && editingDate && (
               <button
-                onClick={() => {
-                  if (editing.taskId) {
-                    db.tasks.update(editing.taskId, {
-                      status: 'done',
-                      completedAt: new Date().toISOString(),
-                    }).then(() => {
-                      loadTasks();
-                      setShowForm(false);
+                onClick={async () => {
+                  if (editing.id) {
+                    const dates = editing.completedDates || [];
+                    const alreadyDone = dates.includes(editingDate);
+                    const newDates = alreadyDone
+                      ? dates.filter(d => d !== editingDate)
+                      : [...dates, editingDate].sort();
+                    await db.lessons.update(editing.id, {
+                      status: newDates.length > 0 ? 'done' : 'todo',
+                      completedDates: newDates,
                     });
+                    // Sync task status
+                    if (editing.taskId) {
+                      await db.tasks.update(editing.taskId, {
+                        status: alreadyDone ? 'in_progress' : 'done',
+                      });
+                      loadTasks();
+                    }
+                    loadLessons();
+                    setShowForm(false);
                   }
                 }}
-                className="w-full mt-4 py-3 rounded-xl bg-green-500 text-white font-bold text-sm shadow-sm active:scale-[0.98] transition-transform"
+                className={`w-full mt-4 py-3 rounded-xl font-bold text-sm shadow-sm active:scale-[0.98] transition-transform ${
+                  editing.completedDates?.includes(editingDate)
+                    ? 'bg-yellow-500 text-white'
+                    : 'bg-green-500 text-white'
+                }`}
               >
-                ✓ 标记这节课为已完成
+                {editing.completedDates?.includes(editingDate) ? '↩ 取消完成标记' : '✓ 标记这件事为已完成'}
               </button>
             )}
 
-            <div className="flex gap-3 mt-4">
-              {editing && (
-                <button onClick={deleteLesson}
-                        className="px-4 py-2.5 rounded-xl text-red-600 bg-red-50 font-medium">
-                  删除
+              <div className="flex gap-3 mt-4">
+                {editing && (
+                  <button onClick={deleteLesson}
+                          className="px-4 py-2.5 rounded-xl text-red-600 bg-red-50 font-medium">
+                    删除
+                  </button>
+                )}
+                <button onClick={saveLesson}
+                        className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium">
+                  保存
                 </button>
-              )}
-              <button onClick={saveLesson}
-                      className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium">
-                保存
-              </button>
+              </div>
             </div>
           </div>
         </div>
@@ -691,18 +783,19 @@ export default function ScheduleView() {
       {showTaskScheduleForm && selectedTask && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center"
              onClick={() => setShowTaskScheduleForm(false)}>
-          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl"
+          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto"
                onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">安排任务到课程表</h2>
-              <button onClick={() => setShowTaskScheduleForm(false)}><X size={20} className="text-gray-400" /></button>
-            </div>
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold">安排到日程表</h2>
+                <button onClick={() => setShowTaskScheduleForm(false)}><X size={20} className="text-gray-400" /></button>
+              </div>
 
-            <div className="bg-blue-50 rounded-lg p-3 mb-3 text-sm text-blue-800">
-              任务: <strong>{selectedTask.title}</strong>
-            </div>
+              <div className="bg-blue-50 rounded-lg p-3 mb-3 text-sm text-blue-800">
+                任务: <strong>{selectedTask.title}</strong>
+              </div>
 
-            <div className="space-y-3">
+              <div className="space-y-3">
               <div>
                 <label className="text-sm text-gray-500">课程名称（可修改）</label>
                 <input value={title} onChange={e => setTitle(e.target.value)}
@@ -750,11 +843,12 @@ export default function ScheduleView() {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-5">
-              <button onClick={saveTaskAsLesson}
-                      className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium">
-                安排到课程表
-              </button>
+              <div className="flex gap-3 mt-5">
+                <button onClick={saveTaskAsLesson}
+                        className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium">
+                  安排到日程表
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -764,6 +858,7 @@ export default function ScheduleView() {
       {showPomodoro && pomodoroLesson && (
         <PomodoroTimer
           lesson={pomodoroLesson}
+          durationMinutes={pomodoroDuration}
           onClose={() => {
             setShowPomodoro(false);
             setPomodoroLesson(null);
