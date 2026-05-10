@@ -1,3 +1,81 @@
+## v1.7.0 — 睡眠与专注关联分析（创新点 2）
+- **Feature**: 分析睡眠质量/时长与次日专注力的数据关联
+  - 新增 `sleep-focus-correlation.ts` 分析引擎
+    - 将睡眠记录与次日专注时长匹配关联
+    - 按睡眠质量（1-5 分）分组统计平均专注时长
+    - 按睡眠时长区间（<6h / 6-7h / 7-8h / 8-9h / 9h+）分组统计
+    - 皮尔逊相关系数计算睡眠评分与专注时长的相关性
+    - 自动识别「最佳睡眠质量」和「最佳睡眠时长区间」
+    - 生成中文推荐建议（如「睡眠评分 5 分、时长 8-9h 时，次日专注力最强」）
+  - `StatsView` 新增「睡眠与专注关联分析」卡片
+    - 左右对比柱状图：睡眠质量 vs 平均专注时长 / 睡眠时长区间 vs 平均专注时长
+    - 紫色/靛蓝色进度条直观展示差异
+    - 底部显示样本天数和相关系数
+    - 数据不足时显示引导文案
+
+,
+## v1.5.0 — 数据迁移系统
+- **Feature**: IndexedDB schema 版本管理与导入兼容性检查
+  - `db.ts` 导出 `CURRENT_SCHEMA_VERSION = 8`，集中管理 schema 版本
+  - `SettingsView` 导出 JSON 时自动附加 `schemaVersion` 字段
+  - 导入 JSON 时自动检测备份版本：
+    - 旧版本备份：显示警告「部分数据可能需要迁移」
+    - 新版本备份：阻止导入，提示「请先升级应用」
+    - 相同版本：正常导入
+    - 缺失版本：默认为 v1（兼容早期备份）
+  - `SettingsView` 导出按钮下方显示当前数据版本号
+
+,
+## v1.4.0 — 本地 AI 助手（Ollama 集成）
+- **Feature**: 集成本地 Ollama AI，增加趣味性
+  - 新增 `ollama.ts` 工具模块：调用本地 `http://localhost:11434` API
+    - `generateWithOllama()` — 向指定模型发送 prompt，支持超时控制
+    - `listOllamaModels()` — 列出本地可用模型
+    - `checkOllamaHealth()` — 检测 Ollama 服务是否在线
+    - 网络错误自动转换为中文提示
+  - 新增 `AIChatView` 组件：类聊天界面
+    - 气泡消息（用户蓝色 / AI 灰色），显示发送时间
+    - 顶部状态栏：在线/离线指示 + 模型选择器
+    - 初始界面提供 4 个快捷建议问题
+    - 输入框支持 Enter 发送，离线时自动禁用
+    - 底部提示「由本地 Ollama 驱动，数据不会离开您的设备」
+  - `App.tsx` 新增 `ai` Tab，`BottomNav` 新增 AI 入口
+  - 快捷键保持 Ctrl+1~8 不变，AI 通过导航进入
+
+,
+## v1.3.0 — Excel 导入支持
+- **Feature**: 支持从 Excel (.xlsx/.xls) 文件导入数据
+  - 新增 `excel-import.ts` 工具模块：使用 `xlsx` 库解析 Excel 文件
+  - 支持工作表自动识别（Goals/Tasks/Lessons/Habits）
+  - 支持 Excel 日期序列号自动转换为 ISO 日期
+  - 支持重复课程天数解析（逗号分隔数字）
+  - `SettingsView` 新增「Excel 导入」独立卡片
+    - 选择 .xlsx 文件后自动解析并导入
+    - 显示导入结果统计（目标/任务/课程/习惯数量）
+    - 错误提示（空工作表、未识别类型等）
+  - 状态校验：无效 status 自动回退为 `todo`
+
+,
+## v1.2.0 — 课程与任务功能区分重构
+- **Feature**: 课程（Lesson）与任务（Task）彻底解耦，不再互相转化
+  - `Task` 类型新增 `scheduledDayOfWeek`/`scheduledStartHour`/`scheduledStartMinute`/`scheduledDurationMinutes` 字段
+  - 任务拖拽到课程表后，不再创建 Lesson，而是更新 Task 的 schedule 字段
+  - 课程表周视图同时渲染 Lessons（规律性课程）和 scheduled Tasks（已安排任务）
+  - 已安排任务以虚线边框 + 半透明背景 + 📋 任务标识与课程区分
+  - `Lesson.taskId` 不再使用（保留字段以兼容旧数据）
+  - `saveTaskAsLesson` 改为 `saveTaskAsScheduled`，移除 Lesson 创建逻辑
+
+## v1.0.0 — 深色模式
+- **Feature**: 系统级深色模式支持 + 手动切换
+  - 新增 `ThemeProvider` 组件：管理主题状态，支持 `light`/`dark`/`system` 三种模式
+  - 自动检测系统 `prefers-color-scheme: dark`
+  - 手动切换偏好保存到 localStorage
+  - `SettingsView` 新增「主题模式」设置卡片（浅色/深色/跟随系统）
+  - `tailwind.config.js` 启用 `darkMode: "class"`
+  - `index.css` 添加 CSS 自定义属性（`--bg-page`, `--bg-card`, `--text-primary` 等）
+  - `BottomNav` 适配深色背景与边框
+  - 全局背景与文字颜色通过 CSS 变量自动切换
+
 ## v0.18.0 — Pomodoro 专注统计增强
 - **Feature**: `StatsView` 专注统计卡片升级
   - 新增「连续天数」指标：统计连续有专注记录的天数（最多回溯 30 天）

@@ -107,6 +107,12 @@ export default function SleepView() {
     return Math.round(total / records.length);
   }, [records]);
 
+  const avgQuality = useMemo(() => {
+    if (records.length === 0) return 0;
+    const total = records.reduce((sum, r) => sum + r.quality, 0);
+    return (total / records.length).toFixed(1);
+  }, [records]);
+
   const sleepTrend = useMemo(() => {
     const last7 = records.slice().reverse().slice(-7);
     return last7.map(r => ({

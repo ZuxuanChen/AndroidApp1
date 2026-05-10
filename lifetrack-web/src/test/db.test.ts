@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Mock Dexie since IndexedDB doesn't work in jsdom
 vi.mock('../db', async () => {
@@ -19,7 +19,7 @@ vi.mock('../db', async () => {
   };
 });
 
-import { db, formatLocalDate, todayLocal } from '../db';
+import { formatLocalDate, todayLocal } from '../db';
 
 describe('db utilities', () => {
   describe('formatLocalDate', () => {

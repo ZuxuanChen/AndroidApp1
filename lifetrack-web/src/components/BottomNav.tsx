@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Target, ListTodo, Moon, LayoutDashboard, Dumbbell, BarChart3, MoreHorizontal, X, Settings } from 'lucide-react';
+import { Calendar, Target, ListTodo, Moon, LayoutDashboard, Dumbbell, BarChart3, MoreHorizontal, X, Settings, Bot } from 'lucide-react';
 
-type Tab = 'dashboard' | 'schedule' | 'task' | 'goal' | 'sleep' | 'habit' | 'stats' | 'settings';
+type Tab = 'dashboard' | 'schedule' | 'task' | 'goal' | 'sleep' | 'habit' | 'stats' | 'settings' | 'ai';
 
 interface Props {
   active: Tab;
@@ -17,9 +17,10 @@ const ALL_TAB_CONFIG: Record<Tab, { label: string; icon: typeof Calendar }> = {
   habit: { label: '习惯', icon: Dumbbell },
   stats: { label: '数据', icon: BarChart3 },
   settings: { label: '设置', icon: Settings },
+  ai: { label: 'AI', icon: Bot },
 };
 
-const ALL_OPTIONS: Tab[] = ['task', 'habit', 'goal', 'sleep', 'stats', 'schedule', 'dashboard', 'settings'];
+const ALL_OPTIONS: Tab[] = ['task', 'habit', 'goal', 'sleep', 'stats', 'schedule', 'dashboard', 'settings', 'ai'];
 
 function getSlot(key: string, fallback: string): Tab {
   const val = localStorage.getItem(key);
@@ -97,7 +98,7 @@ export default function BottomNav({ active, onChange }: Props) {
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-16 z-50">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-around items-center h-16 z-50">
         {renderTabButton(slot1, false)}
         {renderTabButton(slot2, false)}
         {renderTabButton(slot3, true)}
@@ -117,7 +118,7 @@ export default function BottomNav({ active, onChange }: Props) {
 
       {/* More menu overlay */}
       {showMore && (
-        <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-100 shadow-lg z-40 px-4 py-3">
+        <div className="fixed bottom-16 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 shadow-lg z-40 px-4 py-3">
           <div className="flex justify-around">
             {moreTabs.map(key => {
               const { label, icon: Icon } = ALL_TAB_CONFIG[key];

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db, type Goal, type Task, type Lesson, type SleepRecord, type Habit, type HabitLog, type MoodEntry, todayLocal, formatLocalDate } from '../db';
-import { Calendar, Target, ListTodo, Moon, ChevronRight, Clock, Star, Briefcase, CheckCircle2, Flame, Palette, Dumbbell, BarChart3, Smile, AlertTriangle } from 'lucide-react';
+import { Calendar, Target, ListTodo, Moon, ChevronRight, Clock, Star, Briefcase, CheckCircle2, Flame, Palette, Dumbbell, BarChart3, Smile, AlertTriangle, Bell, Lightbulb } from 'lucide-react';
+import { isNotificationsEnabled, requestNotificationPermission, setNotificationsEnabled } from '../utils/notifications';
+import { generateRecommendations, type Recommendation } from '../utils/recommendations';
 
 interface Props {
   onNavigate: (tab: 'schedule' | 'task' | 'goal' | 'sleep' | 'habit' | 'stats') => void;
@@ -64,17 +66,31 @@ export default function DashboardView({ onNavigate }: Props) {
   const [sleepRecords, setSleepRecords] = useState<SleepRecord[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [habitLogs, setHabitLogs] = useState<HabitLog[]>([]);
+  const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
   const [moodEntry, setMoodEntry] = useState<MoodEntry | null>(null);
   const [showMoodForm, setShowMoodForm] = useState(false);
   const [moodEmoji, setMoodEmoji] = useState('😊');
   const [moodNote, setMoodNote] = useState('');
+  const [notifEnabled, setNotifEnabled] = useState(() => isNotificationsEnabled());
+
+  async function toggleNotifications() {
+    if (notifEnabled) {
+      setNotificationsEnabled(false);
+      setNotifEnabled(false);
+    } else {
+      const granted = await requestNotificationPermission();
+      setNotifEnabled(granted);
+    }
+  }
 
   useEffect(() => {
     loadData();
   }, []);
 
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+
   async function loadData() {
-    const [g, t, l, s, h, hl, m] = await Promise.all([
+    const [g, t, l, s, h, hl, m, f] = await Promise.all([
       db.goals.toArray(),
       db.tasks.toArray(),
       db.lessons.toArray(),
@@ -82,6 +98,7 @@ export default function DashboardView({ onNavigate }: Props) {
       db.habits.toArray(),
       db.habitLogs.toArray(),
       db.moodEntries.toArray(),
+      db.focusSessions.toArray(),
     ]);
     setGoals(g);
     setTasks(t);
@@ -90,12 +107,14 @@ export default function DashboardView({ onNavigate }: Props) {
     setSleepRecords(s);
     setHabits(h);
     setHabitLogs(hl);
+    setMoodEntries(m);
     const todayMood = m.find(e => e.date === todayLocal());
     setMoodEntry(todayMood || null);
     if (todayMood) {
       setMoodEmoji(todayMood.emoji);
-      setMoodNote(todayMood.note);
+      setMoodNote(todayMood.note || '');
     }
+    setRecommendations(generateRecommendations(g, t, l, h, hl, s, f, m));
   }
 
   const today = new Date();
@@ -183,7 +202,6 @@ export default function DashboardView({ onNavigate }: Props) {
   const recentSleep = sleepRecords.slice(0, 3);
 
   // === Workload Stats ===
-  const todayStr = todayLocal();
 
   // Course time: completed lessons today (per-date tracking via completedDates)
   const todayDoneLessons = lessons.filter(l =>
@@ -234,6 +252,8 @@ export default function DashboardView({ onNavigate }: Props) {
     await db.lessons.update(lesson.id!, { completedDates: newDates });
     loadData();
   }
+
+  async function saveMood() {
     const today = todayLocal();
     const existing = await db.moodEntries.where('date').equals(today).first();
     if (existing) {
@@ -264,11 +284,12 @@ export default function DashboardView({ onNavigate }: Props) {
 
   // Mood trend
   const recentMoodEntries = moodEntries
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice()
+    .sort((a: MoodEntry, b: MoodEntry) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 7);
   const moodDistribution = (() => {
     const map = new Map<string, number>();
-    recentMoodEntries.forEach(e => { map.set(e.emoji, (map.get(e.emoji) || 0) + 1); });
+    recentMoodEntries.forEach((e: MoodEntry) => { map.set(e.emoji, (map.get(e.emoji) || 0) + 1); });
     return map;
   })();
   const moodTrend = (() => {
@@ -338,6 +359,67 @@ export default function DashboardView({ onNavigate }: Props) {
       </div>
 
       <div className="p-4 space-y-3">
+        {/* Notification Toggle */}
+        <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bell size={18} className={notifEnabled ? 'text-blue-500' : 'text-gray-400'} />
+            <span className="text-sm font-medium text-gray-900">提醒通知</span>
+          </div>
+          <button
+            onClick={toggleNotifications}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              notifEnabled
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {notifEnabled ? '已开启' : '开启'}
+          </button>
+        </div>
+
+        {/* Smart Recommendations */}
+        {recommendations.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center gap-2 mb-3">
+              <Lightbulb size={18} className="text-yellow-500" />
+              <h3 className="font-semibold text-gray-900">智能推荐</h3>
+            </div>
+            <div className="space-y-2">
+              {recommendations.map((rec, i) => (
+                <div key={i} className={`p-2.5 rounded-lg text-sm ${
+                  rec.priority === 'high' ? 'bg-red-50 border border-red-100' :
+                  rec.priority === 'medium' ? 'bg-yellow-50 border border-yellow-100' :
+                  'bg-gray-50 border border-gray-100'
+                }`}>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                      rec.priority === 'high' ? 'bg-red-100 text-red-700' :
+                      rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>{rec.priority === 'high' ? '重要' : rec.priority === 'medium' ? '建议' : '提示'}</span>
+                    <span className="font-medium text-gray-800">{rec.title}</span>
+                  </div>
+                  <p className="text-gray-600 text-xs">{rec.description}</p>
+                  {rec.action && (
+                    <button
+                      onClick={() => {
+                        if (rec.type === 'task') onNavigate('task');
+                        else if (rec.type === 'goal') onNavigate('task');
+                        else if (rec.type === 'lesson') onNavigate('schedule');
+                        else if (rec.type === 'habit') onNavigate('habit');
+                        else if (rec.type === 'sleep') onNavigate('sleep');
+                        else if (rec.type === 'focus') onNavigate('schedule');
+                        else if (rec.type === 'mood') onNavigate('stats');
+                      }}
+                      className="text-xs text-blue-600 mt-1 hover:underline"
+                    >{rec.action}</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Quick Entry Cards */}
         <div className="grid grid-cols-3 gap-3">
           {/* Habit Entry */}
@@ -566,39 +648,43 @@ export default function DashboardView({ onNavigate }: Props) {
         {/* Goal Deadline Alerts */}
         {goalDeadlineUrgency.length > 0 && (
           <div className="space-y-2">
-            {goalDeadlineUrgency.map(({ goal, level, days }) => (
-              <div
-                key={goal.id}
-                className={`rounded-xl p-3 shadow-sm border text-left flex items-center gap-2 ${
-                  level === 'overdue'
-                    ? 'bg-red-50 border-red-200'
-                    : level === 'urgent'
-                    ? 'bg-orange-50 border-orange-200'
-                    : 'bg-yellow-50 border-yellow-200'
-                }`}
-              >
-                <AlertTriangle size={16} className={
-                  level === 'overdue' ? 'text-red-500' : level === 'urgent' ? 'text-orange-500' : 'text-yellow-500'
-                } />
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-medium ${
-                    level === 'overdue' ? 'text-red-700' : level === 'urgent' ? 'text-orange-700' : 'text-yellow-700'
-                  }`}>
-                    {goal.title}
-                  </div>
-                  <div className={`text-xs ${
-                    level === 'overdue' ? 'text-red-500' : level === 'urgent' ? 'text-orange-500' : 'text-yellow-600'
-                  }`}>
-                    {level === 'overdue' ? `已过期 ${days} 天` : `还有 ${days} 天截止`}
-                  </div>
-                </div>
-                <button onClick={() => onNavigate('goal')} className="text-xs font-medium shrink-0"
-                  style={{ color: level === 'overdue' ? '#DC2626' : level === 'urgent' ? '#EA580C' : '#CA8A04' }}
+            {goalDeadlineUrgency.map((item) => {
+              if (!item) return null;
+              const { goal, level, days } = item;
+              return (
+                <div
+                  key={goal.id}
+                  className={`rounded-xl p-3 shadow-sm border text-left flex items-center gap-2 ${
+                    level === 'overdue'
+                      ? 'bg-red-50 border-red-200'
+                      : level === 'urgent'
+                      ? 'bg-orange-50 border-orange-200'
+                      : 'bg-yellow-50 border-yellow-200'
+                  }`}
                 >
-                  去处理 →
-                </button>
-              </div>
-            ))}
+                  <AlertTriangle size={16} className={
+                    level === 'overdue' ? 'text-red-500' : level === 'urgent' ? 'text-orange-500' : 'text-yellow-500'
+                  } />
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm font-medium ${
+                      level === 'overdue' ? 'text-red-700' : level === 'urgent' ? 'text-orange-700' : 'text-yellow-700'
+                    }`}>
+                      {goal.title}
+                    </div>
+                    <div className={`text-xs ${
+                      level === 'overdue' ? 'text-red-500' : level === 'urgent' ? 'text-orange-500' : 'text-yellow-600'
+                    }`}>
+                      {level === 'overdue' ? `已过期 ${days} 天` : `还有 ${days} 天截止`}
+                    </div>
+                  </div>
+                  <button onClick={() => onNavigate('goal')} className="text-xs font-medium shrink-0"
+                    style={{ color: level === 'overdue' ? '#DC2626' : level === 'urgent' ? '#EA580C' : '#CA8A04' }}
+                  >
+                    去处理 →
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -736,7 +822,7 @@ export default function DashboardView({ onNavigate }: Props) {
           <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center"
                onClick={() => setShowMoodForm(false)}>
             <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-5 shadow-xl"
-                 onClick={e => e.stopPropagation()}>
+                 onClick={(e: React.MouseEvent) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold">今日心情</h2>
                 <button onClick={() => setShowMoodForm(false)}>

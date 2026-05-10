@@ -25,17 +25,22 @@ export interface Task {
   id?: number;
   goalId?: number;
   title: string;
-  description?: string; // NEW: task notes/details
+  description?: string;
   status: TaskStatus;
-  priority: number; // 1-3
+  priority: number;
   scheduleType: TaskScheduleType;
   createdAt: string;
   completedAt?: string;
-  dueDate?: string; // YYYY-MM-DD format, optional deadline
-  color: string; // task color
+  dueDate?: string;
+  color: string;
   isRecurring: boolean;
   startDate?: string;
   endDate?: string;
+  // Schedule fields — when a task is dragged onto the schedule board
+  scheduledDayOfWeek?: number;
+  scheduledStartHour?: number;
+  scheduledStartMinute?: number;
+  scheduledDurationMinutes?: number;
 }
 
 export interface Lesson {
@@ -116,6 +121,8 @@ export function todayLocal(): string {
 }
 
 // ========== 数据库 ==========
+
+export const CURRENT_SCHEMA_VERSION = 8;
 
 export class LifeTrackDB extends Dexie {
   goals!: Table<Goal>;

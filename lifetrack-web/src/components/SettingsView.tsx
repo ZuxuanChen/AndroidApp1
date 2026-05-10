@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
-import { db } from '../db';
-import { ArrowLeft, Trash2, AlertTriangle, Settings, LayoutTemplate, Download, Upload, FileJson } from 'lucide-react';
+import { db, CURRENT_SCHEMA_VERSION } from '../db';
+import { useTheme } from './ThemeProvider';
+import { parseExcelFile } from '../utils/excel-import';
+import { ArrowLeft, Trash2, AlertTriangle, Settings, LayoutTemplate, Download, Upload, FileJson, FileSpreadsheet, Moon, Sun, Monitor } from 'lucide-react';
 
 const NAV_OPTIONS = [
   { value: 'task', label: '任务' },
@@ -19,6 +21,7 @@ function getStoredNav(key: string, defaultValue: string): string {
 }
 
 export default function SettingsView() {
+  const { theme, setTheme } = useTheme();
   const [showConfirm1, setShowConfirm1] = useState(false);
   const [showConfirm2, setShowConfirm2] = useState(false);
   const [slot1, setSlot1] = useState(() => getStoredNav('lifetrack-nav-slot-1', 'task'));
@@ -52,6 +55,7 @@ export default function SettingsView() {
       badgeUnlocks: await db.badgeUnlocks.toArray(),
       exportAt: new Date().toISOString(),
       version: 1,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -71,6 +75,58 @@ export default function SettingsView() {
   const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [importMode, setImportMode] = useState<'overwrite' | 'merge'>('overwrite');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const excelInputRef = useRef<HTMLInputElement>(null);
+  const [excelImportResult, setExcelImportResult] = useState<{
+    goalsAdded: number;
+    tasksAdded: number;
+    lessonsAdded: number;
+    habitsAdded: number;
+    errors: string[];
+  } | null>(null);
+
+  async function handleExcelImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExcelImportResult(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const { goals, tasks, lessons, habits, errors } = parseExcelFile(buffer);
+      const result = {
+        goalsAdded: 0,
+        tasksAdded: 0,
+        lessonsAdded: 0,
+        habitsAdded: 0,
+        errors,
+      };
+      for (const g of goals) {
+        if (g.title) {
+          await db.goals.add(g as any);
+          result.goalsAdded++;
+        }
+      }
+      for (const t of tasks) {
+        if (t.title) {
+          await db.tasks.add(t as any);
+          result.tasksAdded++;
+        }
+      }
+      for (const l of lessons) {
+        if (l.title) {
+          await db.lessons.add(l as any);
+          result.lessonsAdded++;
+        }
+      }
+      for (const h of habits) {
+        if (h.name) {
+          await db.habits.add(h as any);
+          result.habitsAdded++;
+        }
+      }
+      setExcelImportResult(result);
+    } catch (err: any) {
+      setExcelImportResult({ goalsAdded: 0, tasksAdded: 0, lessonsAdded: 0, habitsAdded: 0, errors: [err.message || 'Excel 解析失败'] });
+    }
+  }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -82,6 +138,16 @@ export default function SettingsView() {
       const data = JSON.parse(text);
       if (!data.version || !Array.isArray(data.goals)) {
         throw new Error('文件格式不正确，缺少必要字段');
+      }
+      const backupVersion = data.schemaVersion || 1;
+      if (backupVersion < CURRENT_SCHEMA_VERSION) {
+        setImportError(`⚠️ 备份来自旧版本 (v${backupVersion})，当前版本 v${CURRENT_SCHEMA_VERSION}。部分数据可能需要迁移。`);
+      } else if (backupVersion > CURRENT_SCHEMA_VERSION) {
+        setImportError(`⚠️ 备份来自新版本 (v${backupVersion})，当前版本 v${CURRENT_SCHEMA_VERSION}。请先升级应用。`);
+        setImportPreview(null);
+        return;
+      } else {
+        setImportError(null);
       }
       setImportPreview({
         goals: data.goals.length,
@@ -164,7 +230,7 @@ export default function SettingsView() {
 
         // FocusSessions: skip if same start time
         const existingFocus = await db.focusSessions.toArray();
-        const newFocus = stripId(data.focusSessions || []).filter((f: any) => !existingFocus.some(ef => ef.startTime === f.startTime));
+        const newFocus = stripId(data.focusSessions || []).filter((f: any) => !existingFocus.some(ef => ef.date === f.date && ef.durationMinutes === f.durationMinutes));
         if (newFocus.length) await db.focusSessions.bulkAdd(newFocus);
 
         // BadgeUnlocks: skip if same badge
@@ -202,6 +268,33 @@ export default function SettingsView() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* Theme Card */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-2 mb-3">
+            <Moon size={18} className="text-indigo-500" />
+            <h2 className="font-semibold text-gray-900">主题模式</h2>
+          </div>
+          <div className="flex gap-2">
+            {([
+              { value: 'light' as const, label: '浅色', icon: Sun },
+              { value: 'dark' as const, label: '深色', icon: Moon },
+              { value: 'system' as const, label: '跟随系统', icon: Monitor },
+            ]).map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                onClick={() => setTheme(value)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  theme === value
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Icon size={14} /> {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Bottom Navigation Card */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center gap-2 mb-3">
@@ -267,6 +360,7 @@ export default function SettingsView() {
               <Download size={16} />
               导出所有数据（JSON）
             </button>
+            <p className="text-xs text-gray-400 text-center">数据版本 v{CURRENT_SCHEMA_VERSION}</p>
 
             <button
               onClick={() => setShowExportImport(!showExportImport)}
@@ -351,6 +445,49 @@ export default function SettingsView() {
                     >
                       确认{importMode === 'overwrite' ? '覆盖' : '合并'}导入
                     </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Excel Import Card */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center gap-2 mb-3">
+              <FileSpreadsheet size={18} className="text-green-500" />
+              <h2 className="font-semibold text-gray-900">Excel 导入</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+              从 .xlsx 文件导入数据。工作表名应包含对应类型（如 Goals、Tasks、Lessons、Habits）。
+            </p>
+            <input
+              ref={excelInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleExcelImport}
+            />
+            <button
+              onClick={() => excelInputRef.current?.click()}
+              className="w-full py-2.5 rounded-xl bg-green-600 text-white font-medium flex items-center justify-center gap-2"
+            >
+              <Upload size={16} />
+              选择 Excel 文件
+            </button>
+            {excelImportResult && (
+              <div className="mt-3 text-xs space-y-1">
+                <p className="font-medium text-gray-800">导入结果：</p>
+                <div className="grid grid-cols-2 gap-1">
+                  <span>目标: {excelImportResult.goalsAdded}</span>
+                  <span>任务: {excelImportResult.tasksAdded}</span>
+                  <span>课程: {excelImportResult.lessonsAdded}</span>
+                  <span>习惯: {excelImportResult.habitsAdded}</span>
+                </div>
+                {excelImportResult.errors.length > 0 && (
+                  <div className="text-red-600 mt-1">
+                    {excelImportResult.errors.map((e, i) => (
+                      <p key={i}>⚠ {e}</p>
+                    ))}
                   </div>
                 )}
               </div>

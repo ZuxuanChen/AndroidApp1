@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { db, type Task, type Goal, type Lesson, type Habit, type SleepRecord, type MoodEntry } from '../db';
+import { db } from '../db';
 import { Search, X, ListTodo, Target, Calendar, Dumbbell, Moon, Smile, ArrowRight } from 'lucide-react';
 
 type Tab = 'task' | 'goal' | 'schedule' | 'habit' | 'sleep' | 'dashboard';
