@@ -208,7 +208,32 @@ export default function DashboardView({ onNavigate }: Props) {
   const habitDoneCount = todayHabitLogs.length;
   const habitTotal = habits.length;
 
-  async function saveMood() {
+  // Quick toggle habit log
+  async function toggleHabitLog(habitId: number, date: string) {
+    const existing = habitLogs.find(l => l.habitId === habitId && l.date === date);
+    if (existing) {
+      await db.habitLogs.delete(existing.id!);
+    } else {
+      await db.habitLogs.add({ habitId, date });
+    }
+    loadData();
+  }
+
+  // Quick mark task done
+  async function quickMarkTaskDone(taskId: number) {
+    await db.tasks.update(taskId, { status: 'done', completedAt: new Date().toISOString() });
+    loadData();
+  }
+
+  // Quick toggle lesson complete for today
+  async function toggleLessonComplete(lesson: Lesson) {
+    const today = todayLocal();
+    const dates = lesson.completedDates || [];
+    const hasToday = dates.includes(today);
+    const newDates = hasToday ? dates.filter(d => d !== today) : [...dates, today];
+    await db.lessons.update(lesson.id!, { completedDates: newDates });
+    loadData();
+  }
     const today = todayLocal();
     const existing = await db.moodEntries.where('date').equals(today).first();
     if (existing) {
@@ -288,16 +313,40 @@ export default function DashboardView({ onNavigate }: Props) {
         {/* Quick Entry Cards */}
         <div className="grid grid-cols-3 gap-3">
           {/* Habit Entry */}
-          <button onClick={() => onNavigate('habit')} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-left">
+          <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-2">
               <Dumbbell size={18} className="text-green-500" />
               <span className="text-xs font-medium text-green-600">{habitDoneCount}/{habitTotal}</span>
             </div>
             <div className="text-sm font-semibold text-gray-900">习惯打卡</div>
-            <div className="text-xs text-gray-400 mt-0.5">
-              {habitTotal === 0 ? '还没有习惯' : habitDoneCount >= habitTotal ? '今日全勤 🎉' : `还有 ${habitTotal - habitDoneCount} 个`}
-            </div>
-          </button>
+            {habits.length > 0 ? (
+              <div className="mt-2 space-y-1">
+                {habits.slice(0, 3).map(habit => {
+                  const logged = habitLogs.some(l => l.habitId === habit.id && l.date === todayStr);
+                  return (
+                    <button
+                      key={habit.id}
+                      onClick={() => toggleHabitLog(habit.id!, todayStr)}
+                      className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs transition-colors ${
+                        logged ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${logged ? 'bg-green-500' : 'bg-gray-300'}`} style={logged ? {} : { backgroundColor: habit.color }} />
+                      <span className="truncate flex-1 text-left">{habit.name}</span>
+                      {logged && <CheckCircle2 size={12} />}
+                    </button>
+                  );
+                })}
+                {habits.length > 3 && (
+                  <button onClick={() => onNavigate('habit')} className="text-xs text-blue-600 text-left w-full">
+                    +{habits.length - 3} 更多…
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-400 mt-0.5">还没有习惯</div>
+            )}
+          </div>
 
           {/* Mood Entry */}
           <button onClick={() => setShowMoodForm(true)} className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-left">
@@ -426,6 +475,15 @@ export default function DashboardView({ onNavigate }: Props) {
                         {isUpcoming && <span className="text-orange-500">即将开始</span>}
                       </div>
                     </div>
+                    <button
+                      onClick={() => toggleLessonComplete(lesson)}
+                      className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
+                        isDone ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500'
+                      }`}
+                      title={isDone ? '取消完成' : '标记完成'}
+                    >
+                      <CheckCircle2 size={14} />
+                    </button>
                     {isActive && (
                       <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
                     )}
@@ -453,6 +511,13 @@ export default function DashboardView({ onNavigate }: Props) {
             <div className="space-y-2">
               {importantTasks.map(task => (
                 <div key={task.id} className="flex items-center gap-2">
+                  <button
+                    onClick={() => quickMarkTaskDone(task.id!)}
+                    className="shrink-0 w-5 h-5 rounded-full border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 flex items-center justify-center transition-colors"
+                    title="标记完成"
+                  >
+                    <CheckCircle2 size={12} className="text-green-500 opacity-0 hover:opacity-100" />
+                  </button>
                   <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                     task.priority === 3 ? 'bg-red-500' : task.priority === 2 ? 'bg-orange-400' : 'bg-gray-300'
                   }`} />
