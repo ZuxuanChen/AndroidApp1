@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, type Goal, type Task, type Lesson, type SleepRecord, type Habit, type HabitLog, type MoodEntry, todayLocal, formatLocalDate } from '../db';
-import { Calendar, Target, ListTodo, Moon, ChevronRight, Clock, Star, Briefcase, CheckCircle2, Flame, Palette, Dumbbell, BarChart3, Smile, AlertTriangle } from 'lucide-react';
+import { Calendar, Target, ListTodo, Moon, ChevronRight, Clock, Star, Briefcase, CheckCircle2, Flame, Palette, Dumbbell, BarChart3, Smile, AlertTriangle, Bell } from 'lucide-react';
+import { isNotificationsEnabled, requestNotificationPermission, setNotificationsEnabled } from '../utils/notifications';
 
 interface Props {
   onNavigate: (tab: 'schedule' | 'task' | 'goal' | 'sleep' | 'habit' | 'stats') => void;
@@ -67,6 +68,17 @@ export default function DashboardView({ onNavigate }: Props) {
   const [moodEntry, setMoodEntry] = useState<MoodEntry | null>(null);
   const [showMoodForm, setShowMoodForm] = useState(false);
   const [moodEmoji, setMoodEmoji] = useState('😊');
+  const [notifEnabled, setNotifEnabled] = useState(() => isNotificationsEnabled());
+
+  async function toggleNotifications() {
+    if (notifEnabled) {
+      setNotificationsEnabled(false);
+      setNotifEnabled(false);
+    } else {
+      const granted = await requestNotificationPermission();
+      setNotifEnabled(granted);
+    }
+  }
   const [moodNote, setMoodNote] = useState('');
 
   useEffect(() => {
@@ -338,6 +350,24 @@ export default function DashboardView({ onNavigate }: Props) {
       </div>
 
       <div className="p-4 space-y-3">
+        {/* Notification Toggle */}
+        <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bell size={18} className={notifEnabled ? 'text-blue-500' : 'text-gray-400'} />
+            <span className="text-sm font-medium text-gray-900">提醒通知</span>
+          </div>
+          <button
+            onClick={toggleNotifications}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              notifEnabled
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {notifEnabled ? '已开启' : '开启'}
+          </button>
+        </div>
+
         {/* Quick Entry Cards */}
         <div className="grid grid-cols-3 gap-3">
           {/* Habit Entry */}
