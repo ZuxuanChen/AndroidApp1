@@ -97,7 +97,7 @@ export default function BottomNav({ active, onChange }: Props) {
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-16 z-50">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-around items-center h-16 z-50">
         {renderTabButton(slot1, false)}
         {renderTabButton(slot2, false)}
         {renderTabButton(slot3, true)}
@@ -117,7 +117,7 @@ export default function BottomNav({ active, onChange }: Props) {
 
       {/* More menu overlay */}
       {showMore && (
-        <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-100 shadow-lg z-40 px-4 py-3">
+        <div className="fixed bottom-16 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 shadow-lg z-40 px-4 py-3">
           <div className="flex justify-around">
             {moreTabs.map(key => {
               const { label, icon: Icon } = ALL_TAB_CONFIG[key];

@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { db } from '../db';
-import { ArrowLeft, Trash2, AlertTriangle, Settings, LayoutTemplate, Download, Upload, FileJson } from 'lucide-react';
+import { useTheme } from './ThemeProvider';
+import { ArrowLeft, Trash2, AlertTriangle, Settings, LayoutTemplate, Download, Upload, FileJson, Moon, Sun, Monitor } from 'lucide-react';
 
 const NAV_OPTIONS = [
   { value: 'task', label: '任务' },
@@ -19,6 +20,7 @@ function getStoredNav(key: string, defaultValue: string): string {
 }
 
 export default function SettingsView() {
+  const { theme, setTheme } = useTheme();
   const [showConfirm1, setShowConfirm1] = useState(false);
   const [showConfirm2, setShowConfirm2] = useState(false);
   const [slot1, setSlot1] = useState(() => getStoredNav('lifetrack-nav-slot-1', 'task'));
@@ -202,6 +204,33 @@ export default function SettingsView() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* Theme Card */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-2 mb-3">
+            <Moon size={18} className="text-indigo-500" />
+            <h2 className="font-semibold text-gray-900">主题模式</h2>
+          </div>
+          <div className="flex gap-2">
+            {([
+              { value: 'light' as const, label: '浅色', icon: Sun },
+              { value: 'dark' as const, label: '深色', icon: Moon },
+              { value: 'system' as const, label: '跟随系统', icon: Monitor },
+            ]).map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                onClick={() => setTheme(value)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  theme === value
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Icon size={14} /> {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Bottom Navigation Card */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center gap-2 mb-3">

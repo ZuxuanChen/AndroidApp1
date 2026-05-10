@@ -2,13 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-  background: #f5f5f7;
-  color: #1c1c1e;
+@layer base {
+  :root {
+    --bg-page: #f5f5f7;
+    --bg-card: #ffffff;
+    --bg-hover: #f3f4f6;
+    --text-primary: #1c1c1e;
+    --text-secondary: #6b7280;
+    --border-color: #e5e7eb;
+  }
+
+  .dark {
+    --bg-page: #111827;
+    --bg-card: #1f2937;
+    --bg-hover: #374151;
+    --text-primary: #f3f4f6;
+    --text-secondary: #9ca3af;
+    --border-color: #374151;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+  }
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */

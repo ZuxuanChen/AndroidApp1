@@ -1,3 +1,14 @@
+## v1.0.0 — 深色模式
+- **Feature**: 系统级深色模式支持 + 手动切换
+  - 新增 `ThemeProvider` 组件：管理主题状态，支持 `light`/`dark`/`system` 三种模式
+  - 自动检测系统 `prefers-color-scheme: dark`
+  - 手动切换偏好保存到 localStorage
+  - `SettingsView` 新增「主题模式」设置卡片（浅色/深色/跟随系统）
+  - `tailwind.config.js` 启用 `darkMode: "class"`
+  - `index.css` 添加 CSS 自定义属性（`--bg-page`, `--bg-card`, `--text-primary` 等）
+  - `BottomNav` 适配深色背景与边框
+  - 全局背景与文字颜色通过 CSS 变量自动切换
+
 ## v0.18.0 — Pomodoro 专注统计增强
 - **Feature**: `StatsView` 专注统计卡片升级
   - 新增「连续天数」指标：统计连续有专注记录的天数（最多回溯 30 天）

@@ -11,6 +11,7 @@ import StatsView from './components/StatsView';
 import SettingsView from './components/SettingsView';
 import ErrorBoundary from './components/ErrorBoundary';
 import SearchOverlay from './components/SearchOverlay';
+import { ThemeProvider } from './components/ThemeProvider';
 
 type Tab = 'dashboard' | 'schedule' | 'task' | 'goal' | 'sleep' | 'habit' | 'stats' | 'settings';
 
@@ -65,8 +66,9 @@ function App() {
   }
 
   return (
-    <ErrorBoundary>
-      <div className="h-full flex flex-col bg-gray-50">
+    <ThemeProvider>
+      <ErrorBoundary>
+        <div className="h-full flex flex-col">
         <main className="flex-1 overflow-hidden pb-14">
           {activeTab === 'dashboard' && <DashboardView onNavigate={setActiveTab} />}
           {activeTab === 'schedule' && <ScheduleView />}
@@ -89,7 +91,8 @@ function App() {
           />
         )}
       </div>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </ThemeProvider>
   );
 }
 
