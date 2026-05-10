@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+declare const global: typeof globalThis;
 import { generateWithOllama, listOllamaModels, checkOllamaHealth } from '../utils/ollama';
 
 describe('Ollama Integration', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    fetchMock = vi.fn();
-    global.fetch = fetchMock;
+    fetchMock = vi.fn<typeof fetch>();
+    (globalThis as any).fetch = fetchMock;
   });
 
   afterEach(() => {
@@ -36,7 +38,6 @@ describe('Ollama Integration', () => {
     it('should throw on timeout', { timeout: 10000 }, async () => {
       fetchMock.mockImplementation(() => {
         return new Promise((_, reject) => {
-          const controller = (global as any)._lastAbortController;
           setTimeout(() => reject(new Error('The operation was aborted')), 200);
         });
       });

@@ -230,7 +230,7 @@ export default function SettingsView() {
 
         // FocusSessions: skip if same start time
         const existingFocus = await db.focusSessions.toArray();
-        const newFocus = stripId(data.focusSessions || []).filter((f: any) => !existingFocus.some(ef => ef.startTime === f.startTime));
+        const newFocus = stripId(data.focusSessions || []).filter((f: any) => !existingFocus.some(ef => ef.date === f.date && ef.durationMinutes === f.durationMinutes));
         if (newFocus.length) await db.focusSessions.bulkAdd(newFocus);
 
         // BadgeUnlocks: skip if same badge

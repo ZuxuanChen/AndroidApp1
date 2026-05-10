@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateRecommendations } from '../utils/recommendations';
-import type { Goal, Task, Lesson, Habit, HabitLog, SleepRecord, FocusSession, MoodEntry } from '../db';
+import type { Goal, Task, SleepRecord, FocusSession } from '../db';
 
 function todayStr(): string {
   const d = new Date();
