@@ -88,9 +88,9 @@ export default function HabitView() {
     loadData();
   }
 
-  // Generate last 30 days for the grid
+  // Generate last 35 days (5 weeks) for heatmap
   const days: { date: string; label: string; dayNum: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
+  for (let i = 34; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const ds = formatLocalDate(d);
@@ -99,6 +99,40 @@ export default function HabitView() {
       label: `${d.getMonth() + 1}/${d.getDate()}`,
       dayNum: d.getDate(),
     });
+  }
+  // Group into weeks (Mon-Sun)
+  const weeks: { date: string; label: string; dayNum: number }[][] = [];
+  let currentWeek: typeof days = [];
+  for (const day of days) {
+    const dow = new Date(day.date + 'T00:00:00').getDay(); // 0=Sun, 1=Mon...
+    const mondayBased = dow === 0 ? 6 : dow - 1; // 0=Mon, 6=Sun
+    if (mondayBased === 0 && currentWeek.length > 0) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+    currentWeek.push(day);
+  }
+  if (currentWeek.length > 0) weeks.push(currentWeek);
+
+  function getIntensity(habitId: number, date: string): string {
+    // Return hex alpha based on streak length around this date
+    const habitLogs = logs.filter(l => l.habitId === habitId).map(l => l.date).sort();
+    const idx = habitLogs.indexOf(date);
+    if (idx === -1) return '00';
+    // Count consecutive days including this one (backward)
+    let consecutive = 1;
+    for (let i = idx - 1; i >= 0; i--) {
+      const prev = new Date(habitLogs[i] + 'T00:00:00');
+      const curr = new Date(habitLogs[i + 1] + 'T00:00:00');
+      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff === 1) consecutive++;
+      else break;
+    }
+    if (consecutive >= 7) return 'FF';
+    if (consecutive >= 5) return 'CC';
+    if (consecutive >= 3) return '99';
+    if (consecutive >= 2) return '66';
+    return '44';
   }
 
   function calcStreak(habitId: number): number {
@@ -195,28 +229,36 @@ export default function HabitView() {
                 </div>
               </div>
 
-              {/* Mini calendar grid */}
-              <div className="grid grid-cols-15 gap-1">
-                {days.map(d => {
-                  const logged = isLogged(habit.id!, d.date);
-                  const isToday = d.date === today;
-                  return (
-                    <button
-                      key={d.date}
-                      onClick={() => toggleLog(habit.id!, d.date)}
-                      className="flex flex-col items-center"
-                    >
-                      <div
-                        className={`w-full aspect-square rounded-md ${isToday ? 'ring-2 ring-offset-1' : ''}`}
-                        style={{
-                          backgroundColor: logged ? habit.color : '#f3f4f6',
-                          boxShadow: isToday ? `0 0 0 2px white, 0 0 0 4px ${habit.color}` : undefined,
-                        }}
-                      />
-                      <span className="text-[9px] text-gray-400 mt-0.5">{d.dayNum}</span>
-                    </button>
-                  );
-                })}
+              {/* Heatmap - 7-day week layout */}
+              <div className="mt-2">
+                <div className="grid grid-cols-7 gap-1">
+                  {weeks.map((week, wi) =>
+                    week.map((day, di) => {
+                      const logged = isLogged(habit.id!, day.date);
+                      const isToday = day.date === today;
+                      const intensity = logged ? getIntensity(habit.id!, day.date) : 0;
+                      return (
+                        <button
+                          key={`${wi}-${di}`}
+                          onClick={() => toggleLog(habit.id!, day.date)}
+                          title={day.label}
+                          className="flex flex-col items-center"
+                        >
+                          <div
+                            className={`w-full aspect-square rounded-sm transition-all hover:scale-110 ${isToday ? 'ring-2 ring-offset-1' : ''}`}
+                            style={{
+                              backgroundColor: logged ? `${habit.color}${intensity}` : '#f3f4f6',
+                              boxShadow: isToday ? `0 0 0 2px white, 0 0 0 4px ${habit.color}` : undefined,
+                            }}
+                          />
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                <div className="flex justify-between text-[9px] text-gray-400 mt-1 px-0.5">
+                  {['一','二','三','四','五','六','日'].map(d => <span key={d}>{d}</span>)}
+                </div>
               </div>
             </div>
           );
