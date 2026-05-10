@@ -10,6 +10,7 @@ import HabitView from './components/HabitView';
 import StatsView from './components/StatsView';
 import SettingsView from './components/SettingsView';
 import ErrorBoundary from './components/ErrorBoundary';
+import SearchOverlay from './components/SearchOverlay';
 
 type Tab = 'dashboard' | 'schedule' | 'task' | 'goal' | 'sleep' | 'habit' | 'stats' | 'settings';
 
@@ -18,6 +19,7 @@ const TAB_ORDER: Tab[] = ['dashboard', 'schedule', 'task', 'goal', 'sleep', 'hab
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [ready, setReady] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
     seedData().then(() => setReady(true));
@@ -32,9 +34,14 @@ function App() {
     return () => window.removeEventListener('navigate-tab', handler);
   }, []);
 
-  // Keyboard shortcuts: Ctrl+1..8 to switch tabs
+  // Keyboard shortcuts: Ctrl+1..8 to switch tabs, Ctrl+K for search
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'k') {
+        e.preventDefault();
+        setShowSearch(prev => !prev);
+        return;
+      }
       if (!e.ctrlKey) return;
       const num = parseInt(e.key, 10);
       if (num >= 1 && num <= TAB_ORDER.length) {
@@ -71,6 +78,16 @@ function App() {
           {activeTab === 'settings' && <SettingsView />}
         </main>
         <BottomNav active={activeTab} onChange={setActiveTab} />
+
+        {showSearch && (
+          <SearchOverlay
+            onNavigate={(tab) => {
+              // Cast to full Tab type since SearchOverlay only uses subset
+              setActiveTab(tab as Tab);
+            }}
+            onClose={() => setShowSearch(false)}
+          />
+        )}
       </div>
     </ErrorBoundary>
   );
