@@ -404,17 +404,34 @@ export default function DashboardView({ onNavigate }: Props) {
             <p className="text-sm text-gray-400 py-2">今天没有课，可以摸鱼了 🐟</p>
           ) : (
             <div className="space-y-2">
-              {todayLessons.map(lesson => (
-                <div key={lesson.id} className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: lesson.color }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{lesson.title}</div>
-                    <div className="text-xs text-gray-400">
-                      {lesson.startHour.toString().padStart(2, '0')}:{lesson.startMinute.toString().padStart(2, '0')} · {lesson.durationMinutes}分钟
+              {todayLessons.map(lesson => {
+                const isDone = lesson.completedDates?.includes(todayStr);
+                const now = new Date();
+                const nowMin = now.getHours() * 60 + now.getMinutes();
+                const startMin = lesson.startHour * 60 + lesson.startMinute;
+                const endMin = startMin + lesson.durationMinutes;
+                const isActive = !isDone && nowMin >= startMin && nowMin < endMin;
+                const isPast = !isDone && nowMin >= endMin;
+                const isUpcoming = !isDone && nowMin < startMin;
+                return (
+                  <div key={lesson.id} className={`flex items-center gap-3 rounded-lg p-2 ${isActive ? 'bg-blue-50 border border-blue-100' : ''}`}>
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: lesson.color }} />
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm font-medium truncate ${isDone ? 'line-through text-gray-400' : 'text-gray-900'}`}>{lesson.title}</div>
+                      <div className="text-xs text-gray-400 flex items-center gap-1">
+                        <span>{lesson.startHour.toString().padStart(2, '0')}:{lesson.startMinute.toString().padStart(2, '0')} · {lesson.durationMinutes}分钟</span>
+                        {isActive && <span className="text-blue-600 font-medium">进行中</span>}
+                        {isDone && <span className="text-green-600">已完成</span>}
+                        {isPast && <span className="text-gray-400">已结束</span>}
+                        {isUpcoming && <span className="text-orange-500">即将开始</span>}
+                      </div>
                     </div>
+                    {isActive && (
+                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
