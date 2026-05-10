@@ -1,5 +1,12 @@
 import Dexie, { type Table } from 'dexie';
 
+// ========== 常量 ==========
+
+export const COLORS = [
+  '#4A6FA5', '#FF6B6B', '#34C759', '#FF9500', '#AF52DE',
+  '#5856D6', '#FF2D55', '#5AC8FA', '#FFCC00', '#8E8E93'
+];
+
 // ========== 类型定义 ==========
 
 export interface Goal {

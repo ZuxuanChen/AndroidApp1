@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, type Lesson, type Task, type Goal, formatLocalDate } from '../db';
+import { db, type Lesson, type Task, type Goal, formatLocalDate, COLORS } from '../db';
 import PomodoroTimer from './PomodoroTimer';
 import { Plus, X, ChevronLeft, ChevronRight, ListTodo, GripVertical, Calendar as CalendarIcon, LayoutGrid } from 'lucide-react';
 
@@ -8,11 +8,6 @@ const MONTH_NAMES = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8�
 const START_HOUR = 7;
 const END_HOUR = 23;
 const SLOT_HEIGHT = 48;
-
-const COLORS = [
-  '#4A6FA5', '#FF6B6B', '#34C759', '#FF9500', '#AF52DE',
-  '#5856D6', '#FF2D55', '#5AC8FA', '#FFCC00', '#8E8E93'
-];
 
 // Check if a lesson should appear on the given date
 function lessonVisibleOnDate(lesson: Lesson, date: Date): boolean {

@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react';
-import { db, type Goal } from '../db';
+import { db, type Goal, COLORS } from '../db';
 import { Plus, X, Target, CalendarDays, ArrowLeft } from 'lucide-react';
 
-const COLORS = [
-  '#4A6FA5', '#FF6B6B', '#34C759', '#FF9500', '#AF52DE',
-  '#5856D6', '#FF2D55', '#5AC8FA', '#FFCC00', '#8E8E93'
-];
 
 export default function GoalView() {
   const [goals, setGoals] = useState<Goal[]>([]);

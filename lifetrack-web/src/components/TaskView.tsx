@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, type Task, type Goal } from '../db';
+import { db, type Task, type Goal, COLORS } from '../db';
 import { Plus, X, CheckCircle2, Circle, Clock, ArrowRight, Filter, Repeat, Zap, ArrowUpDown, ArrowLeft } from 'lucide-react';
 
 type FilterStatus = 'all' | 'todo' | 'in_progress' | 'done' | 'overdue';
@@ -38,10 +38,6 @@ const SORT_LABELS: Record<SortOrder, string> = {
   dueDateAsc: '截止日期 ↑',
 };
 
-const COLORS = [
-  '#4A6FA5', '#FF6B6B', '#34C759', '#FF9500', '#AF52DE',
-  '#5856D6', '#FF2D55', '#5AC8FA', '#FFCC00', '#8E8E93'
-];
 
 export default function TaskView() {
   const [tasks, setTasks] = useState<Task[]>([]);

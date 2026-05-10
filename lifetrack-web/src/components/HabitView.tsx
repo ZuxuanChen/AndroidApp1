@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react';
-import { db, type Habit, type HabitLog, formatLocalDate, todayLocal } from '../db';
+import { db, type Habit, type HabitLog, formatLocalDate, todayLocal, COLORS } from '../db';
 import { Plus, X, Trash2, ArrowLeft } from 'lucide-react';
-
-const COLORS = [
-  '#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#8B5CF6',
-  '#EC4899', '#06B6D4', '#F97316', '#84CC16', '#6366F1'
-];
 
 const FUN_QUOTES = [
   "不要骗自己哦～",
