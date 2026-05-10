@@ -262,6 +262,26 @@ export default function DashboardView({ onNavigate }: Props) {
     }))
     .filter(d => d.value > 0);
 
+  // Mood trend
+  const recentMoodEntries = moodEntries
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 7);
+  const moodDistribution = (() => {
+    const map = new Map<string, number>();
+    recentMoodEntries.forEach(e => { map.set(e.emoji, (map.get(e.emoji) || 0) + 1); });
+    return map;
+  })();
+  const moodTrend = (() => {
+    if (recentMoodEntries.length < 2) return null;
+    const today = recentMoodEntries[0];
+    const yesterday = recentMoodEntries[1];
+    const score: Record<string, number> = { '😊': 5, '🙂': 4, '😐': 3, '😟': 2, '😫': 1 };
+    const diff = (score[today.emoji] || 3) - (score[yesterday.emoji] || 3);
+    if (diff > 0) return 'up';
+    if (diff < 0) return 'down';
+    return 'same';
+  })();
+
   function calcDuration(bed: string, wake: string): number {
     const [bh, bm] = bed.split(':').map(Number);
     const [wh, wm] = wake.split(':').map(Number);
@@ -656,6 +676,57 @@ export default function DashboardView({ onNavigate }: Props) {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Mood Trend */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Smile size={18} className="text-yellow-500" />
+              <h2 className="font-semibold text-gray-900">心情趋势</h2>
+            </div>
+            {moodTrend && (
+              <span className={`text-xs font-medium ${
+                moodTrend === 'up' ? 'text-green-600' : moodTrend === 'down' ? 'text-red-500' : 'text-gray-400'
+              }`}>
+                {moodTrend === 'up' ? '↑ 比昨天好' : moodTrend === 'down' ? '↓ 比昨天差' : '→ 持平'}
+              </span>
+            )}
+          </div>
+          {recentMoodEntries.length === 0 ? (
+            <p className="text-sm text-gray-400 py-2">还没有心情记录，点上方卡片记录一下 😊</p>
+          ) : (
+            <div className="space-y-3">
+              {/* Recent 7 days */}
+              <div className="flex items-center gap-1">
+                {recentMoodEntries.slice().reverse().map(e => (
+                  <button
+                    key={e.date}
+                    onClick={() => onNavigate('stats')}
+                    className="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                    title={`${e.date}${e.note ? ': ' + e.note : ''}`}
+                  >
+                    <span className="text-lg">{e.emoji}</span>
+                    <span className="text-[10px] text-gray-400">
+                      {new Date(e.date).getMonth() + 1}/{new Date(e.date).getDate()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {/* Distribution */}
+              {moodDistribution.size > 0 && (
+                <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                  <span className="text-xs text-gray-500">分布：</span>
+                  {Array.from(moodDistribution.entries()).map(([emoji, count]) => (
+                    <span key={emoji} className="flex items-center gap-0.5 text-xs text-gray-600">
+                      <span>{emoji}</span>
+                      <span className="font-medium">{count}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
