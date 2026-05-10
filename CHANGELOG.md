@@ -1,7 +1,19 @@
 # LifeTrack Changelog
 
+## v0.4.4 — Dashboard 日程实时状态
+- **UX**: `DashboardView`「今日日程」卡片现在显示课程实时状态
+  - 进行中（蓝色）：当前时间在课程时间范围内，带蓝色高亮 + 脉冲圆点
+  - 已完成（绿色）：`completedDates` 包含今日，带删除线文字
+  - 已结束（灰色）：课程时间已过但未完成
+  - 即将开始（橙色）：课程尚未开始
+
+## v0.4.3 — 提取共享 COLORS 常量
+- **Code Quality**: 将 `COLORS` 数组提取到 `db.ts` 作为单一数据源
+  - 移除 `TaskView.tsx`、`ScheduleView.tsx`、`GoalView.tsx`、`HabitView.tsx` 中的重复定义
+  - 消除 DRY 违规，便于后续主题系统扩展
+
 ## v0.4.2 — StatsView 除零保护
-- **Bugfix**: 修复 `StatsView` 中计算平均专注分钟时的除零隐患
+- **Bugfix**: 修复 `StatsView` 计算平均专注分钟时的除零隐患
   - 条件从 `thisWeekFocus.length > 0` 改为 `focusSessions.length > 0`
   - 防止 `focusSessions` 为空时显示 `NaN`
 
