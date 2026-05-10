@@ -32,13 +32,14 @@ export default function ScheduleView() {
   const [showTaskScheduleForm, setShowTaskScheduleForm] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editing, setEditing] = useState<Lesson | null>(null);
+  const [editingDate, setEditingDate] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
   const [showPomodoro, setShowPomodoro] = useState(false);
   const [pomodoroLesson, setPomodoroLesson] = useState<Lesson | null>(null);
   const [pomodoroDuration, setPomodoroDuration] = useState(25);
-  const [currentTimeTick, setCurrentTimeTick] = useState(0);
+  const [, setCurrentTimeTick] = useState(0);
   // ===== 重叠检测工具函数 =====
   function lessonsOverlap(a: { dayOfWeek: number; startHour: number; startMinute: number; durationMinutes: number },
                           b: { dayOfWeek: number; startHour: number; startMinute: number; durationMinutes: number }): boolean {
@@ -541,7 +542,7 @@ export default function ScheduleView() {
                           <div className="absolute top-0.5 right-0.5 text-[8px] bg-white/30 px-1 rounded">✓ 已完成</div>
                         )}
                       </div>
-                    )}
+                    );
                   })}
 
                   {/* Scheduled tasks for this day */}

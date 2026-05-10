@@ -49,13 +49,13 @@ describe('Import Merge Logic', () => {
 
     it('should handle empty existing', () => {
       const existing: MockGoal[] = [];
-      const incoming: MockGoal[] = [{ title: 'A' }, { title: 'B' }];
+      const incoming: MockGoal[] = [{ title: 'A', color: '#000' }, { title: 'B', color: '#fff' }];
       const result = mergeGoals(existing, incoming);
       expect(result).toHaveLength(2);
     });
 
     it('should handle empty incoming', () => {
-      const existing: MockGoal[] = [{ title: 'A' }];
+      const existing: MockGoal[] = [{ title: 'A', color: '#000' }];
       const incoming: MockGoal[] = [];
       const result = mergeGoals(existing, incoming);
       expect(result).toHaveLength(0);

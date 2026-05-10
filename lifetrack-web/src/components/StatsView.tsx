@@ -354,8 +354,6 @@ export default function StatsView() {
         <p className="text-sm text-gray-400 mt-0.5">看看这段时间的进步 📈</p>
       </div>
 
-      </div>
-
       <div className="p-4 space-y-4">
         {/* Export buttons */}
         <div className="flex gap-2">

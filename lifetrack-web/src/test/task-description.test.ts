@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest';
 
 describe('Task Description Logic', () => {
   it('should store description when provided', () => {
-    const task = { title: 'T1', description: 'Details here' };
+    const task = { title: 'T1', description: 'Details here' } as { title: string; description?: string };
     expect(task.description).toBe('Details here');
   });
 
   it('should allow undefined description for backward compat', () => {
-    const task = { title: 'T1' };
+    const task = { title: 'T1' } as { title: string; description?: string };
     expect(task.description).toBeUndefined();
   });
 
@@ -31,7 +31,7 @@ describe('Task Description Logic', () => {
 
   it('should match search in title even without description', () => {
     const query = 't1';
-    const task = { title: 'T1' };
+    const task = { title: 'T1' } as { title: string; description?: string };
     const inTitle = task.title.toLowerCase().includes(query);
     const inDesc = task.description?.toLowerCase().includes(query);
     expect(inTitle || inDesc).toBe(true);
@@ -39,7 +39,7 @@ describe('Task Description Logic', () => {
 
   it('should not fail search when description is undefined', () => {
     const query = 'notes';
-    const task = { title: 'T1' };
+    const task = { title: 'T1' } as { title: string; description?: string };
     const inDesc = task.description?.toLowerCase().includes(query) ?? false;
     expect(inDesc).toBe(false);
   });

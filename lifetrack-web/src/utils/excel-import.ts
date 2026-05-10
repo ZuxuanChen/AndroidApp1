@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { Goal, Task, Lesson, Habit, SleepRecord, MoodEntry, FocusSession } from '../db';
+import type { Goal, Task, Lesson, Habit } from '../db';
 
 export interface ExcelImportResult {
   success: boolean;

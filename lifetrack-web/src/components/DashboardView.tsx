@@ -66,9 +66,11 @@ export default function DashboardView({ onNavigate }: Props) {
   const [sleepRecords, setSleepRecords] = useState<SleepRecord[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [habitLogs, setHabitLogs] = useState<HabitLog[]>([]);
+  const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
   const [moodEntry, setMoodEntry] = useState<MoodEntry | null>(null);
   const [showMoodForm, setShowMoodForm] = useState(false);
   const [moodEmoji, setMoodEmoji] = useState('😊');
+  const [moodNote, setMoodNote] = useState('');
   const [notifEnabled, setNotifEnabled] = useState(() => isNotificationsEnabled());
 
   async function toggleNotifications() {
@@ -80,7 +82,6 @@ export default function DashboardView({ onNavigate }: Props) {
       setNotifEnabled(granted);
     }
   }
-  const [moodNote, setMoodNote] = useState('');
 
   useEffect(() => {
     loadData();
@@ -106,11 +107,12 @@ export default function DashboardView({ onNavigate }: Props) {
     setSleepRecords(s);
     setHabits(h);
     setHabitLogs(hl);
+    setMoodEntries(m);
     const todayMood = m.find(e => e.date === todayLocal());
     setMoodEntry(todayMood || null);
     if (todayMood) {
       setMoodEmoji(todayMood.emoji);
-      setMoodNote(todayMood.note);
+      setMoodNote(todayMood.note || '');
     }
     setRecommendations(generateRecommendations(g, t, l, h, hl, s, f, m));
   }
@@ -200,7 +202,6 @@ export default function DashboardView({ onNavigate }: Props) {
   const recentSleep = sleepRecords.slice(0, 3);
 
   // === Workload Stats ===
-  const todayStr = todayLocal();
 
   // Course time: completed lessons today (per-date tracking via completedDates)
   const todayDoneLessons = lessons.filter(l =>
@@ -251,6 +252,8 @@ export default function DashboardView({ onNavigate }: Props) {
     await db.lessons.update(lesson.id!, { completedDates: newDates });
     loadData();
   }
+
+  async function saveMood() {
     const today = todayLocal();
     const existing = await db.moodEntries.where('date').equals(today).first();
     if (existing) {
@@ -281,11 +284,12 @@ export default function DashboardView({ onNavigate }: Props) {
 
   // Mood trend
   const recentMoodEntries = moodEntries
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice()
+    .sort((a: MoodEntry, b: MoodEntry) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 7);
   const moodDistribution = (() => {
     const map = new Map<string, number>();
-    recentMoodEntries.forEach(e => { map.set(e.emoji, (map.get(e.emoji) || 0) + 1); });
+    recentMoodEntries.forEach((e: MoodEntry) => { map.set(e.emoji, (map.get(e.emoji) || 0) + 1); });
     return map;
   })();
   const moodTrend = (() => {
@@ -644,39 +648,43 @@ export default function DashboardView({ onNavigate }: Props) {
         {/* Goal Deadline Alerts */}
         {goalDeadlineUrgency.length > 0 && (
           <div className="space-y-2">
-            {goalDeadlineUrgency.map(({ goal, level, days }) => (
-              <div
-                key={goal.id}
-                className={`rounded-xl p-3 shadow-sm border text-left flex items-center gap-2 ${
-                  level === 'overdue'
-                    ? 'bg-red-50 border-red-200'
-                    : level === 'urgent'
-                    ? 'bg-orange-50 border-orange-200'
-                    : 'bg-yellow-50 border-yellow-200'
-                }`}
-              >
-                <AlertTriangle size={16} className={
-                  level === 'overdue' ? 'text-red-500' : level === 'urgent' ? 'text-orange-500' : 'text-yellow-500'
-                } />
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-medium ${
-                    level === 'overdue' ? 'text-red-700' : level === 'urgent' ? 'text-orange-700' : 'text-yellow-700'
-                  }`}>
-                    {goal.title}
-                  </div>
-                  <div className={`text-xs ${
-                    level === 'overdue' ? 'text-red-500' : level === 'urgent' ? 'text-orange-500' : 'text-yellow-600'
-                  }`}>
-                    {level === 'overdue' ? `已过期 ${days} 天` : `还有 ${days} 天截止`}
-                  </div>
-                </div>
-                <button onClick={() => onNavigate('goal')} className="text-xs font-medium shrink-0"
-                  style={{ color: level === 'overdue' ? '#DC2626' : level === 'urgent' ? '#EA580C' : '#CA8A04' }}
+            {goalDeadlineUrgency.map((item) => {
+              if (!item) return null;
+              const { goal, level, days } = item;
+              return (
+                <div
+                  key={goal.id}
+                  className={`rounded-xl p-3 shadow-sm border text-left flex items-center gap-2 ${
+                    level === 'overdue'
+                      ? 'bg-red-50 border-red-200'
+                      : level === 'urgent'
+                      ? 'bg-orange-50 border-orange-200'
+                      : 'bg-yellow-50 border-yellow-200'
+                  }`}
                 >
-                  去处理 →
-                </button>
-              </div>
-            ))}
+                  <AlertTriangle size={16} className={
+                    level === 'overdue' ? 'text-red-500' : level === 'urgent' ? 'text-orange-500' : 'text-yellow-500'
+                  } />
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm font-medium ${
+                      level === 'overdue' ? 'text-red-700' : level === 'urgent' ? 'text-orange-700' : 'text-yellow-700'
+                    }`}>
+                      {goal.title}
+                    </div>
+                    <div className={`text-xs ${
+                      level === 'overdue' ? 'text-red-500' : level === 'urgent' ? 'text-orange-500' : 'text-yellow-600'
+                    }`}>
+                      {level === 'overdue' ? `已过期 ${days} 天` : `还有 ${days} 天截止`}
+                    </div>
+                  </div>
+                  <button onClick={() => onNavigate('goal')} className="text-xs font-medium shrink-0"
+                    style={{ color: level === 'overdue' ? '#DC2626' : level === 'urgent' ? '#EA580C' : '#CA8A04' }}
+                  >
+                    去处理 →
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -814,7 +822,7 @@ export default function DashboardView({ onNavigate }: Props) {
           <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center"
                onClick={() => setShowMoodForm(false)}>
             <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-5 shadow-xl"
-                 onClick={e => e.stopPropagation()}>
+                 onClick={(e: React.MouseEvent) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold">今日心情</h2>
                 <button onClick={() => setShowMoodForm(false)}>
