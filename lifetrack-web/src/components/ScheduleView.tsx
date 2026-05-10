@@ -38,6 +38,7 @@ export default function ScheduleView() {
   const [showPomodoro, setShowPomodoro] = useState(false);
   const [pomodoroLesson, setPomodoroLesson] = useState<Lesson | null>(null);
   const [pomodoroDuration, setPomodoroDuration] = useState(25);
+  const [currentTimeTick, setCurrentTimeTick] = useState(0);
   // ===== 重叠检测工具函数 =====
   function lessonsOverlap(a: { dayOfWeek: number; startHour: number; startMinute: number; durationMinutes: number },
                           b: { dayOfWeek: number; startHour: number; startMinute: number; durationMinutes: number }): boolean {
@@ -78,6 +79,15 @@ export default function ScheduleView() {
     loadTasks();
   }, []);
 
+  // Update current time indicator every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      // Force re-render to update current time line position
+      setCurrentTimeTick(Date.now());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   async function loadLessons() {
     const all = await db.lessons.toArray();
     setLessons(all);
@@ -97,6 +107,12 @@ export default function ScheduleView() {
     timeSlots.push(`${h}:00`);
     timeSlots.push(`${h}:30`);
   }
+
+  // Current time indicator position (for week view)
+  const now = new Date();
+  const currentMinuteOfDay = now.getHours() * 60 + now.getMinutes();
+  const currentTimeTop = ((currentMinuteOfDay - START_HOUR * 60) / 30) * SLOT_HEIGHT;
+  const showCurrentTime = currentMinuteOfDay >= START_HOUR * 60 && currentMinuteOfDay < END_HOUR * 60;
 
   // Week view dates
   const weekDates = (() => {
@@ -499,6 +515,18 @@ export default function ScheduleView() {
                     <div key={i} className="border-b border-gray-50"
                          style={{ height: SLOT_HEIGHT }} />
                   ))}
+                  {/* Current time indicator */}
+                  {showCurrentTime && isToday(weekDates[dayIdx]) && (
+                    <div
+                      className="absolute left-0 right-0 z-10 pointer-events-none"
+                      style={{ top: currentTimeTop }}
+                    >
+                      <div className="flex items-center">
+                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 -ml-0.5" />
+                        <div className="flex-1 h-px bg-red-500/70" />
+                      </div>
+                    </div>
+                  )}
                   {/* Lessons filtered by date range */}
                   {lessons.filter(l => lessonVisibleOnDate(l, weekDates[dayIdx])).map(lesson => {
                     const style = getLessonStyle(lesson);

@@ -1,4 +1,11 @@
-# LifeTrack Changelog
+## v0.6.0 — CSV 数据导出
+- **Feature**: 新增 CSV 导出工具 `utils/csvExport.ts`，符合 RFC 4180 规范
+  - 自动转义逗号、引号、换行符
+  - UTF-8 BOM 前缀确保 Excel 兼容
+- **UX**: `StatsView` 新增「导出工作量 CSV」按钮
+  - 导出最近 7 天：日期、标签、课程分钟数、任务分钟数、总计
+- **UX**: `StatsView` 新增「导出任务 CSV」按钮
+  - 导出全部任务：ID、标题、状态、优先级、类型、是否重复、截止日期、创建日期、完成日期
 
 ## v0.5.0 — 全局搜索
 - **Feature**: 新增 `SearchOverlay` 全局搜索组件
@@ -85,4 +92,4 @@
 
 ---
 
-**总计: 114 tests passing | TypeScript zero errors | 无破坏性变更**
+**总计: 125 tests passing | TypeScript zero errors | 无破坏性变更**
