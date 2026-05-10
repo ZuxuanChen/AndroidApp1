@@ -69,6 +69,7 @@ export default function SettingsView() {
   } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
+  const [importMode, setImportMode] = useState<'overwrite' | 'merge'>('overwrite');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -105,16 +106,18 @@ export default function SettingsView() {
       const text = await importFile.text();
       const data = JSON.parse(text);
 
-      // Clear existing data
-      await db.goals.clear();
-      await db.tasks.clear();
-      await db.lessons.clear();
-      await db.sleepRecords.clear();
-      await db.habits.clear();
-      await db.habitLogs.clear();
-      await db.moodEntries.clear();
-      await db.focusSessions.clear();
-      await db.badgeUnlocks.clear();
+      if (importMode === 'overwrite') {
+        // Clear existing data
+        await db.goals.clear();
+        await db.tasks.clear();
+        await db.lessons.clear();
+        await db.sleepRecords.clear();
+        await db.habits.clear();
+        await db.habitLogs.clear();
+        await db.moodEntries.clear();
+        await db.focusSessions.clear();
+        await db.badgeUnlocks.clear();
+      }
 
       // Import new data (strip auto-increment IDs to let Dexie reassign)
       const stripId = (arr: any[]) => arr.map((item: any) => {
@@ -122,15 +125,64 @@ export default function SettingsView() {
         return rest;
       });
 
-      if (data.goals?.length) await db.goals.bulkAdd(stripId(data.goals));
-      if (data.tasks?.length) await db.tasks.bulkAdd(stripId(data.tasks));
-      if (data.lessons?.length) await db.lessons.bulkAdd(stripId(data.lessons));
-      if (data.sleepRecords?.length) await db.sleepRecords.bulkAdd(stripId(data.sleepRecords));
-      if (data.habits?.length) await db.habits.bulkAdd(stripId(data.habits));
-      if (data.habitLogs?.length) await db.habitLogs.bulkAdd(stripId(data.habitLogs));
-      if (data.moodEntries?.length) await db.moodEntries.bulkAdd(stripId(data.moodEntries));
-      if (data.focusSessions?.length) await db.focusSessions.bulkAdd(stripId(data.focusSessions));
-      if (data.badgeUnlocks?.length) await db.badgeUnlocks.bulkAdd(stripId(data.badgeUnlocks));
+      // For merge mode, we need to check for conflicts
+      if (importMode === 'merge') {
+        // Goals: skip if title exists
+        const existingGoals = await db.goals.toArray();
+        const newGoals = stripId(data.goals || []).filter((g: any) => !existingGoals.some(eg => eg.title === g.title));
+        if (newGoals.length) await db.goals.bulkAdd(newGoals);
+
+        // Tasks: skip if title exists
+        const existingTasks = await db.tasks.toArray();
+        const newTasks = stripId(data.tasks || []).filter((t: any) => !existingTasks.some(et => et.title === t.title));
+        if (newTasks.length) await db.tasks.bulkAdd(newTasks);
+
+        // Lessons: skip if same day+start time
+        const existingLessons = await db.lessons.toArray();
+        const newLessons = stripId(data.lessons || []).filter((l: any) => !existingLessons.some(el => el.dayOfWeek === l.dayOfWeek && el.startHour === l.startHour && el.startMinute === l.startMinute));
+        if (newLessons.length) await db.lessons.bulkAdd(newLessons);
+
+        // Sleep: skip if same date
+        const existingSleep = await db.sleepRecords.toArray();
+        const newSleep = stripId(data.sleepRecords || []).filter((s: any) => !existingSleep.some(es => es.date === s.date));
+        if (newSleep.length) await db.sleepRecords.bulkAdd(newSleep);
+
+        // Habits: skip if name exists
+        const existingHabits = await db.habits.toArray();
+        const newHabits = stripId(data.habits || []).filter((h: any) => !existingHabits.some(eh => eh.name === h.name));
+        if (newHabits.length) await db.habits.bulkAdd(newHabits);
+
+        // HabitLogs: skip if same habit+date
+        const existingLogs = await db.habitLogs.toArray();
+        const newLogs = stripId(data.habitLogs || []).filter((l: any) => !existingLogs.some(el => el.habitId === l.habitId && el.date === l.date));
+        if (newLogs.length) await db.habitLogs.bulkAdd(newLogs);
+
+        // MoodEntries: skip if same date
+        const existingMoods = await db.moodEntries.toArray();
+        const newMoods = stripId(data.moodEntries || []).filter((m: any) => !existingMoods.some(em => em.date === m.date));
+        if (newMoods.length) await db.moodEntries.bulkAdd(newMoods);
+
+        // FocusSessions: skip if same start time
+        const existingFocus = await db.focusSessions.toArray();
+        const newFocus = stripId(data.focusSessions || []).filter((f: any) => !existingFocus.some(ef => ef.startTime === f.startTime));
+        if (newFocus.length) await db.focusSessions.bulkAdd(newFocus);
+
+        // BadgeUnlocks: skip if same badge
+        const existingBadges = await db.badgeUnlocks.toArray();
+        const newBadges = stripId(data.badgeUnlocks || []).filter((b: any) => !existingBadges.some(eb => eb.badgeId === b.badgeId));
+        if (newBadges.length) await db.badgeUnlocks.bulkAdd(newBadges);
+      } else {
+        // Overwrite mode: simple bulkAdd
+        if (data.goals?.length) await db.goals.bulkAdd(stripId(data.goals));
+        if (data.tasks?.length) await db.tasks.bulkAdd(stripId(data.tasks));
+        if (data.lessons?.length) await db.lessons.bulkAdd(stripId(data.lessons));
+        if (data.sleepRecords?.length) await db.sleepRecords.bulkAdd(stripId(data.sleepRecords));
+        if (data.habits?.length) await db.habits.bulkAdd(stripId(data.habits));
+        if (data.habitLogs?.length) await db.habitLogs.bulkAdd(stripId(data.habitLogs));
+        if (data.moodEntries?.length) await db.moodEntries.bulkAdd(stripId(data.moodEntries));
+        if (data.focusSessions?.length) await db.focusSessions.bulkAdd(stripId(data.focusSessions));
+        if (data.badgeUnlocks?.length) await db.badgeUnlocks.bulkAdd(stripId(data.badgeUnlocks));
+      }
 
       window.location.reload();
     } catch (err: any) {
@@ -258,12 +310,46 @@ export default function SettingsView() {
                       <span>专注: {importPreview.focus}</span>
                       <span>徽章: {importPreview.badges}</span>
                     </div>
-                    <p className="text-red-600 mt-2">⚠️ 导入将覆盖现有全部数据，不可恢复！</p>
+
+                    {/* Import Mode Selector */}
+                    <div className="mt-3 space-y-2">
+                      <p className="font-medium text-gray-800">导入模式</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setImportMode('overwrite')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                            importMode === 'overwrite'
+                              ? 'bg-orange-100 text-orange-700 border border-orange-200'
+                              : 'bg-white text-gray-600 border border-gray-200'
+                          }`}
+                        >
+                          覆盖导入
+                        </button>
+                        <button
+                          onClick={() => setImportMode('merge')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                            importMode === 'merge'
+                              ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                              : 'bg-white text-gray-600 border border-gray-200'
+                          }`}
+                        >
+                          合并导入
+                        </button>
+                      </div>
+                      {importMode === 'overwrite' ? (
+                        <p className="text-red-600">⚠️ 覆盖导入将删除现有全部数据，不可恢复！</p>
+                      ) : (
+                        <p className="text-blue-600">ℹ️ 合并导入会跳过已存在的数据，保留现有内容</p>
+                      )}
+                    </div>
+
                     <button
                       onClick={() => setShowImportConfirm(true)}
-                      className="w-full py-2 rounded-lg bg-orange-600 text-white text-sm font-medium mt-2"
+                      className={`w-full py-2 rounded-lg text-white text-sm font-medium mt-2 ${
+                        importMode === 'overwrite' ? 'bg-orange-600' : 'bg-blue-600'
+                      }`}
                     >
-                      确认导入
+                      确认{importMode === 'overwrite' ? '覆盖' : '合并'}导入
                     </button>
                   </div>
                 )}
@@ -359,11 +445,15 @@ export default function SettingsView() {
           <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl"
                onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle size={24} className="text-orange-500" />
-              <h2 className="text-lg font-bold">确认导入？</h2>
+              <AlertTriangle size={24} className={importMode === 'overwrite' ? 'text-orange-500' : 'text-blue-500'} />
+              <h2 className="text-lg font-bold">确认{importMode === 'overwrite' ? '覆盖' : '合并'}导入？</h2>
             </div>
             <p className="text-sm text-gray-600 mb-5">
-              导入将<strong className="text-orange-600">覆盖所有现有数据</strong>。当前数据将被替换为备份文件中的内容，此操作不可恢复。
+              {importMode === 'overwrite' ? (
+                <>导入将<strong className="text-orange-600">覆盖所有现有数据</strong>。当前数据将被替换为备份文件中的内容，此操作不可恢复。</>
+              ) : (
+                <>导入将<strong className="text-blue-600">合并到现有数据</strong>。已存在的数据会被保留，仅添加备份中不存在的记录。</>
+              )}
             </p>
             <div className="flex gap-3">
               <button onClick={() => setShowImportConfirm(false)}
@@ -371,8 +461,10 @@ export default function SettingsView() {
                 取消
               </button>
               <button onClick={confirmImport}
-                      className="flex-1 py-2.5 rounded-xl bg-orange-600 text-white font-medium">
-                确认导入
+                      className={`flex-1 py-2.5 rounded-xl text-white font-medium ${
+                        importMode === 'overwrite' ? 'bg-orange-600' : 'bg-blue-600'
+                      }`}>
+                确认{importMode === 'overwrite' ? '覆盖' : '合并'}导入
               </button>
             </div>
           </div>
