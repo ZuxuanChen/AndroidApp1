@@ -107,11 +107,18 @@ export default function SleepView() {
     return Math.round(total / records.length);
   }, [records]);
 
-  const avgQuality = useMemo(() => {
-    if (records.length === 0) return 0;
-    const total = records.reduce((sum, r) => sum + r.quality, 0);
-    return (total / records.length).toFixed(1);
+  const sleepTrend = useMemo(() => {
+    const last7 = records.slice().reverse().slice(-7);
+    return last7.map(r => ({
+      date: r.date.slice(5).replace('-', '/'),
+      duration: calcDuration(r.bedTime, r.wakeTime),
+      quality: r.quality,
+    }));
   }, [records]);
+
+  const maxDuration = useMemo(() => {
+    return sleepTrend.length > 0 ? Math.max(...sleepTrend.map(s => s.duration)) : 0;
+  }, [sleepTrend]);
 
   return (
     <div className="h-full flex flex-col">
@@ -149,6 +156,31 @@ export default function SleepView() {
           </div>
         </div>
       </div>
+
+      {/* Sleep Trend Chart */}
+      {sleepTrend.length > 1 && (
+        <div className="mx-4 mb-3 bg-white rounded-xl p-3 shadow-sm border border-gray-100">
+          <div className="text-xs text-gray-400 mb-2">近7天睡眠趋势</div>
+          <div className="flex items-end gap-2 h-24">
+            {sleepTrend.map((s, i) => {
+              const h = maxDuration > 0 ? (s.duration / maxDuration) * 80 : 0;
+              const barColor = s.duration >= 420 ? '#34C759' : s.duration >= 360 ? '#FF9500' : '#FF3B30';
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <div className="w-full flex flex-col items-center justify-end">
+                    <span className="text-[9px] text-gray-500">{Math.round(s.duration / 60)}h</span>
+                    <div
+                      className="w-full rounded-t-md min-h-[4px]"
+                      style={{ height: `${Math.max(h, 4)}px`, backgroundColor: barColor, opacity: 0.7 + (s.quality / 10) }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-gray-400">{s.date}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
         {records.length === 0 && (

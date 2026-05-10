@@ -68,9 +68,14 @@ export default function PomodoroTimer({ lesson, durationMinutes, onClose }: Prop
 
   async function handleMarkLessonDone() {
     if (lesson.id) {
+      const today = formatLocalDate(new Date());
+      const currentDates = lesson.completedDates || [];
+      const newDates = currentDates.includes(today)
+        ? currentDates
+        : [...currentDates, today].sort();
       await db.lessons.update(lesson.id, {
         status: 'done',
-        completedAt: new Date().toISOString(),
+        completedDates: newDates,
       });
     }
     onClose();

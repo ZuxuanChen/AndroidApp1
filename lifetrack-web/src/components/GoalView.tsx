@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-import { db, type Goal } from '../db';
-import { Plus, X, Target, CalendarDays, ArrowLeft } from 'lucide-react';
+import { db, type Goal, COLORS } from '../db';
+import { Plus, X, Target, CalendarDays, ArrowLeft, Clock } from 'lucide-react';
 
-const COLORS = [
-  '#4A6FA5', '#FF6B6B', '#34C759', '#FF9500', '#AF52DE',
-  '#5856D6', '#FF2D55', '#5AC8FA', '#FFCC00', '#8E8E93'
-];
 
 export default function GoalView() {
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [goalTaskCounts, setGoalTaskCounts] = useState<Record<number, { total: number; done: number }>>({});
+  const [goalLessonMinutes, setGoalLessonMinutes] = useState<Record<number, { total: number; completed: number }>>({});
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Goal | null>(null);
 
@@ -22,8 +20,23 @@ export default function GoalView() {
   }, []);
 
   async function loadGoals() {
-    const all = await db.goals.toArray();
-    setGoals(all.reverse());
+    const [allGoals, allTasks, allLessons] = await Promise.all([db.goals.toArray(), db.tasks.toArray(), db.lessons.toArray()]);
+    setGoals(allGoals.reverse());
+    const counts: Record<number, { total: number; done: number }> = {};
+    const lessonMinutes: Record<number, { total: number; completed: number }> = {};
+    for (const g of allGoals) {
+      const related = allTasks.filter(t => t.goalId === g.id);
+      counts[g.id!] = { total: related.length, done: related.filter(t => t.status === 'done').length };
+      // Calculate lesson time investment
+      const relatedLessons = allLessons.filter(l => l.taskId && related.some(t => t.id === l.taskId));
+      const totalMin = relatedLessons.reduce((s, l) => s + l.durationMinutes, 0);
+      const completedMin = relatedLessons
+        .filter(l => l.completedDates && l.completedDates.length > 0)
+        .reduce((s, l) => s + l.durationMinutes * (l.completedDates?.length || 0), 0);
+      lessonMinutes[g.id!] = { total: totalMin, completed: completedMin };
+    }
+    setGoalTaskCounts(counts);
+    setGoalLessonMinutes(lessonMinutes);
   }
 
   function openForm(goal?: Goal) {
@@ -98,29 +111,58 @@ export default function GoalView() {
           </div>
         )}
 
-        {goals.map(goal => (
-          <button
-            key={goal.id}
-            onClick={() => openForm(goal)}
-            className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-left"
-          >
-            <div className="flex items-start gap-3">
-              <div className="w-3 h-3 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: goal.color }} />
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-gray-900 truncate">{goal.title}</h3>
-                {goal.description && (
-                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">{goal.description}</p>
-                )}
-                {goal.deadline && (
-                  <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
-                    <CalendarDays size={12} />
-                    <span>截止: {formatDate(goal.deadline)}</span>
-                  </div>
-                )}
+        {goals.map(goal => {
+          const progress = goalTaskCounts[goal.id!];
+          const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+          return (
+            <button
+              key={goal.id}
+              onClick={() => openForm(goal)}
+              className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-left"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-3 h-3 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: goal.color }} />
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900 truncate">{goal.title}</h3>
+                  {goal.description && (
+                    <p className="text-sm text-gray-500 mt-1 line-clamp-2">{goal.description}</p>
+                  )}
+                  {progress && progress.total > 0 && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                        <span>进度 {progress.done}/{progress.total}</span>
+                        <span className={pct === 100 ? 'text-green-600 font-medium' : ''}>{pct}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {goalLessonMinutes[goal.id!] && goalLessonMinutes[goal.id!].total > 0 && (
+                    <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
+                      <Clock size={12} />
+                      <span>
+                        已投入 {Math.floor(goalLessonMinutes[goal.id!].completed / 60)}小时{goalLessonMinutes[goal.id!].completed % 60}分钟
+                        {goalLessonMinutes[goal.id!].total > goalLessonMinutes[goal.id!].completed && (
+                          <span className="text-gray-300"> / 总计 {Math.floor(goalLessonMinutes[goal.id!].total / 60)}小时{goalLessonMinutes[goal.id!].total % 60}分钟</span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {goal.deadline && (
+                    <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
+                      <CalendarDays size={12} />
+                      <span>截止: {formatDate(goal.deadline)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       {/* Form Modal */}

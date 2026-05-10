@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db, type Task, type Lesson, type SleepRecord, type FocusSession, type MoodEntry, type Habit, type HabitLog, type BadgeUnlock, type Goal, formatLocalDate } from '../db';
-import { Trophy, Star, Zap, Sunrise, Moon, BedDouble, TrendingUp, Clock, CheckCircle2, Smile, ArrowLeft, Target } from 'lucide-react';
+import { Trophy, Star, Zap, Sunrise, Moon, BedDouble, TrendingUp, Clock, CheckCircle2, Smile, ArrowLeft, Target, Download, BrainCircuit } from 'lucide-react';
+import { generateCsv, downloadCsv } from '../utils/csvExport';
+import { analyzeSleepFocusCorrelation, type SleepFocusCorrelation } from '../utils/sleep-focus-correlation';
 
 const BADGE_DEFS = [
   { id: 'first-task', name: '初出茅庐', desc: '完成第一个任务', icon: Star, color: '#F59E0B' },
@@ -23,6 +25,7 @@ export default function StatsView() {
   const [badgeUnlocks, setBadgeUnlocks] = useState<BadgeUnlock[]>([]);
   const [newBadges, setNewBadges] = useState<string[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [sleepFocusCorr, setSleepFocusCorr] = useState<SleepFocusCorrelation | null>(null);
 
   useEffect(() => {
     loadData();
@@ -47,6 +50,7 @@ export default function StatsView() {
     setMoodEntries(m.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setBadgeUnlocks(bu);
     setGoals(g);
+    setSleepFocusCorr(analyzeSleepFocusCorrelation(s, f));
 
     // Check for new badge unlocks
     const newlyUnlocked: string[] = [];
@@ -222,6 +226,27 @@ export default function StatsView() {
     return todayD.getTime() - d.getTime() <= 7 * 24 * 60 * 60 * 1000;
   });
 
+  // Focus per day (last 7 days)
+  const focusData = last7Days.map(({ date }) => {
+    const dayFocus = focusSessions.filter(f => f.date === date);
+    return dayFocus.reduce((s, f) => s + f.durationMinutes, 0) / 60;
+  });
+
+  // Focus streak (consecutive days with focus sessions)
+  const focusStreak = (() => {
+    let streak = 0;
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const ds = formatLocalDate(d);
+      if (focusSessions.some(f => f.date === ds)) {
+        streak++;
+      } else if (i > 0) {
+        break;
+      }
+    }
+    return streak;
+  })();
+
   // SVG chart helpers
   function BarChart({ data, color }: { data: (number | null)[]; color: string }) {
     const max = Math.max(...data.filter(d => d !== null) as number[], 1);
@@ -279,6 +304,42 @@ export default function StatsView() {
     );
   }
 
+  // CSV Export
+  function exportWorkloadCsv() {
+    const rows = last7Days.map(({ date, label }) => {
+      const dayLessons = lessons.filter(l => l.completedDates?.includes(date));
+      const lessonMinutes = dayLessons.reduce((s, l) => s + l.durationMinutes, 0);
+      const dayTasks = tasks.filter(t => t.status === 'done' && t.completedAt?.startsWith(date) && !lessons.some(l => l.taskId === t.id));
+      const extraMinutes = dayTasks.length * 60;
+      return {
+        日期: date,
+        标签: label,
+        课程时长分钟: lessonMinutes,
+        任务时长分钟: extraMinutes,
+        总时长分钟: lessonMinutes + extraMinutes,
+        总时长小时: ((lessonMinutes + extraMinutes) / 60).toFixed(2),
+      };
+    });
+    const csv = generateCsv(['日期', '标签', '课程时长分钟', '任务时长分钟', '总时长分钟', '总时长小时'], rows);
+    downloadCsv(`lifetrack-workload-${formatLocalDate(new Date())}.csv`, csv);
+  }
+
+  function exportTasksCsv() {
+    const rows = tasks.map(t => ({
+      ID: t.id,
+      标题: t.title,
+      状态: t.status,
+      优先级: t.priority,
+      类型: t.scheduleType,
+      是否重复: t.isRecurring ? '是' : '否',
+      截止日期: t.dueDate || '',
+      创建日期: t.createdAt.slice(0, 10),
+      完成日期: t.completedAt?.slice(0, 10) || '',
+    }));
+    const csv = generateCsv(['ID', '标题', '状态', '优先级', '类型', '是否重复', '截止日期', '创建日期', '完成日期'], rows);
+    downloadCsv(`lifetrack-tasks-${formatLocalDate(new Date())}.csv`, csv);
+  }
+
   return (
     <div className="h-full overflow-y-auto no-scrollbar">
       {/* Header */}
@@ -293,7 +354,25 @@ export default function StatsView() {
         <p className="text-sm text-gray-400 mt-0.5">看看这段时间的进步 📈</p>
       </div>
 
+      </div>
+
       <div className="p-4 space-y-4">
+        {/* Export buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={exportWorkloadCsv}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Download size={14} /> 导出工作量 CSV
+          </button>
+          <button
+            onClick={exportTasksCsv}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Download size={14} /> 导出任务 CSV
+          </button>
+        </div>
+
         {/* New badges toast */}
         {newBadges.length > 0 && (
           <div className="bg-gradient-to-r from-yellow-100 to-orange-100 border border-yellow-200 rounded-xl p-3 flex items-center gap-3">
@@ -325,11 +404,24 @@ export default function StatsView() {
             </div>
             <div className="text-center flex-1">
               <div className="text-2xl font-bold text-gray-900">
-                {thisWeekFocus.length > 0 ? Math.round(totalFocusMinutes / focusSessions.length) : 0}
+                {focusSessions.length > 0 ? Math.round(totalFocusMinutes / focusSessions.length) : 0}
               </div>
               <div className="text-xs text-gray-400">平均分钟</div>
             </div>
+            <div className="text-center flex-1">
+              <div className="text-2xl font-bold text-gray-900">{focusStreak}</div>
+              <div className="text-xs text-gray-400">连续天数</div>
+            </div>
           </div>
+        </div>
+
+        {/* Focus Trend */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap size={18} className="text-blue-500" />
+            <h2 className="font-semibold text-gray-900">专注趋势（小时）</h2>
+          </div>
+          <BarChart data={focusData} color="#3B82F6" />
         </div>
 
         {/* Workload Trend */}
@@ -349,6 +441,56 @@ export default function StatsView() {
           </div>
           <BarChart data={taskData} color="#10B981" />
         </div>
+
+        {/* Sleep-Focus Correlation */}
+        {sleepFocusCorr && sleepFocusCorr.qualityCorrelation.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center gap-2 mb-3">
+              <BrainCircuit size={18} className="text-purple-500" />
+              <h2 className="font-semibold text-gray-900">睡眠与专注关联分析</h2>
+            </div>
+            <p className="text-sm text-gray-700 mb-3">{sleepFocusCorr.recommendation}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">按睡眠质量</p>
+                <div className="space-y-1.5">
+                  {sleepFocusCorr.qualityCorrelation.map(q => (
+                    <div key={q.quality} className="flex items-center gap-2">
+                      <span className="text-xs w-8">{q.quality}分</span>
+                      <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-purple-500 rounded-full"
+                          style={{ width: `${Math.min(100, q.avgFocusMinutes / 2)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-gray-500 w-10 text-right">{q.avgFocusMinutes}分</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">按睡眠时长</p>
+                <div className="space-y-1.5">
+                  {sleepFocusCorr.durationCorrelation.map(d => (
+                    <div key={d.range} className="flex items-center gap-2">
+                      <span className="text-xs w-10">{d.range}</span>
+                      <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-indigo-500 rounded-full"
+                          style={{ width: `${Math.min(100, d.avgFocusMinutes / 2)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-gray-500 w-10 text-right">{d.avgFocusMinutes}分</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 text-xs text-gray-400 text-center">
+              基于 {sleepFocusCorr.qualityCorrelation.reduce((s, q) => s + q.days, 0)} 天数据 · 相关系数 {sleepFocusCorr.correlationCoefficient.toFixed(2)}
+            </div>
+          </div>
+        )}
 
         {/* Sleep Trend */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">

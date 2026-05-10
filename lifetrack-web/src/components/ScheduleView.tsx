@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, type Lesson, type Task, type Goal, formatLocalDate } from '../db';
+import { db, type Lesson, type Task, type Goal, formatLocalDate, COLORS } from '../db';
 import PomodoroTimer from './PomodoroTimer';
 import { Plus, X, ChevronLeft, ChevronRight, ListTodo, GripVertical, Calendar as CalendarIcon, LayoutGrid } from 'lucide-react';
 
@@ -8,11 +8,6 @@ const MONTH_NAMES = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8�
 const START_HOUR = 7;
 const END_HOUR = 23;
 const SLOT_HEIGHT = 48;
-
-const COLORS = [
-  '#4A6FA5', '#FF6B6B', '#34C759', '#FF9500', '#AF52DE',
-  '#5856D6', '#FF2D55', '#5AC8FA', '#FFCC00', '#8E8E93'
-];
 
 // Check if a lesson should appear on the given date
 function lessonVisibleOnDate(lesson: Lesson, date: Date): boolean {
@@ -43,7 +38,29 @@ export default function ScheduleView() {
   const [showPomodoro, setShowPomodoro] = useState(false);
   const [pomodoroLesson, setPomodoroLesson] = useState<Lesson | null>(null);
   const [pomodoroDuration, setPomodoroDuration] = useState(25);
-  const [editingDate, setEditingDate] = useState<string | null>(null);
+  const [currentTimeTick, setCurrentTimeTick] = useState(0);
+  // ===== 重叠检测工具函数 =====
+  function lessonsOverlap(a: { dayOfWeek: number; startHour: number; startMinute: number; durationMinutes: number },
+                          b: { dayOfWeek: number; startHour: number; startMinute: number; durationMinutes: number }): boolean {
+    if (a.dayOfWeek !== b.dayOfWeek) return false;
+    const aStart = a.startHour * 60 + a.startMinute;
+    const aEnd = aStart + a.durationMinutes;
+    const bStart = b.startHour * 60 + b.startMinute;
+    const bEnd = bStart + b.durationMinutes;
+    return aStart < bEnd && bStart < aEnd;
+  }
+
+  function validateLesson(data: { title: string; startHour: number; startMinute: number; durationMinutes: number }): string | null {
+    if (!data.title.trim()) return '课程名称不能为空';
+    if (data.title.trim().length > 50) return '课程名称不能超过50字';
+    if (data.startHour < 0 || data.startHour > 23) return '开始时间无效';
+    if (data.startMinute !== 0 && data.startMinute !== 15 && data.startMinute !== 30 && data.startMinute !== 45) return '开始分钟只能为0、15、30、45';
+    if (data.durationMinutes <= 0 || data.durationMinutes > 480) return '时长必须在1分钟到8小时之间';
+    return null;
+  }
+
+  const [formError, setFormError] = useState<string | null>(null);
+  const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [dayOfWeek, setDayOfWeek] = useState(1);
@@ -60,6 +77,15 @@ export default function ScheduleView() {
   useEffect(() => {
     loadLessons();
     loadTasks();
+  }, []);
+
+  // Update current time indicator every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      // Force re-render to update current time line position
+      setCurrentTimeTick(Date.now());
+    }, 60000);
+    return () => clearInterval(timer);
   }, []);
 
   async function loadLessons() {
@@ -81,6 +107,12 @@ export default function ScheduleView() {
     timeSlots.push(`${h}:00`);
     timeSlots.push(`${h}:30`);
   }
+
+  // Current time indicator position (for week view)
+  const now = new Date();
+  const currentMinuteOfDay = now.getHours() * 60 + now.getMinutes();
+  const currentTimeTop = ((currentMinuteOfDay - START_HOUR * 60) / 30) * SLOT_HEIGHT;
+  const showCurrentTime = currentMinuteOfDay >= START_HOUR * 60 && currentMinuteOfDay < END_HOUR * 60;
 
   // Week view dates
   const weekDates = (() => {
@@ -154,6 +186,28 @@ export default function ScheduleView() {
       status: editing?.status || 'todo',
       completedDates: editing?.completedDates || [],
     };
+
+    // Validation
+    const error = validateLesson({ title: data.title, startHour, startMinute, durationMinutes: duration });
+    if (error) {
+      setFormError(error);
+      return;
+    }
+
+    // Overlap detection
+    const newLesson = { dayOfWeek, startHour, startMinute, durationMinutes: duration };
+    const conflicts = lessons.filter(l => l.id !== editing?.id && lessonsOverlap(
+      { dayOfWeek: l.dayOfWeek, startHour: l.startHour, startMinute: l.startMinute, durationMinutes: l.durationMinutes },
+      newLesson
+    ));
+    if (conflicts.length > 0) {
+      setOverlapWarning(`与「${conflicts[0].title}」时间重叠，确定保存吗？`);
+      return;
+    }
+
+    setFormError(null);
+    setOverlapWarning(null);
+
     if (editing?.id) {
       await db.lessons.update(editing.id, data);
       // Sync color across all lessons with the same title
@@ -216,31 +270,17 @@ export default function ScheduleView() {
     setShowTaskScheduleForm(true);
   }
 
-  async function saveTaskAsLesson() {
-    if (!selectedTask) return;
-    const data: Lesson = {
-      taskId: selectedTask.id,
-      title: title.trim() || selectedTask.title,
-      dayOfWeek,
-      startHour,
-      startMinute,
-      durationMinutes: duration,
-      color,
-      location: location.trim() || undefined,
-      repeatDays: repeatDays.length > 0 ? repeatDays : undefined,
-      startDate: repeatDays.length > 1 ? startDate || undefined : undefined,
-      endDate: repeatDays.length > 1 ? endDate || undefined : undefined,
-      status: 'todo',
-      completedDates: [],
-    };
-    await db.lessons.add(data);
-    // Update task status to in_progress
-    if (selectedTask.id) {
-      await db.tasks.update(selectedTask.id, { status: 'in_progress' });
-    }
+  async function saveTaskAsScheduled() {
+    if (!selectedTask?.id) return;
+    await db.tasks.update(selectedTask.id, {
+      scheduledDayOfWeek: dayOfWeek,
+      scheduledStartHour: startHour,
+      scheduledStartMinute: startMinute,
+      scheduledDurationMinutes: duration,
+      status: 'in_progress',
+    });
     setShowTaskScheduleForm(false);
     setSelectedTask(null);
-    loadLessons();
     loadTasks();
   }
 
@@ -461,6 +501,18 @@ export default function ScheduleView() {
                     <div key={i} className="border-b border-gray-50"
                          style={{ height: SLOT_HEIGHT }} />
                   ))}
+                  {/* Current time indicator */}
+                  {showCurrentTime && isToday(weekDates[dayIdx]) && (
+                    <div
+                      className="absolute left-0 right-0 z-10 pointer-events-none"
+                      style={{ top: currentTimeTop }}
+                    >
+                      <div className="flex items-center">
+                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 -ml-0.5" />
+                        <div className="flex-1 h-px bg-red-500/70" />
+                      </div>
+                    </div>
+                  )}
                   {/* Lessons filtered by date range */}
                   {lessons.filter(l => lessonVisibleOnDate(l, weekDates[dayIdx])).map(lesson => {
                     const style = getLessonStyle(lesson);
@@ -488,6 +540,36 @@ export default function ScheduleView() {
                         {isDone && (
                           <div className="absolute top-0.5 right-0.5 text-[8px] bg-white/30 px-1 rounded">✓ 已完成</div>
                         )}
+                      </div>
+                    )}
+                  })}
+
+                  {/* Scheduled tasks for this day */}
+                  {tasks.filter(t =>
+                    t.scheduledDayOfWeek === dayIdx &&
+                    t.scheduledStartHour !== undefined &&
+                    t.scheduledStartMinute !== undefined &&
+                    t.scheduledDurationMinutes !== undefined
+                  ).map(task => {
+                    const startMin = task.scheduledStartHour! * 60 + task.scheduledStartMinute!;
+                    const top = (startMin - START_HOUR * 60) / 60 * SLOT_HEIGHT;
+                    const height = (task.scheduledDurationMinutes! / 60) * SLOT_HEIGHT;
+                    return (
+                      <div
+                        key={`task-${task.id}`}
+                        className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 text-left text-xs overflow-hidden shadow-sm border-2 border-dashed ${
+                          task.status === 'done' ? 'opacity-50' : ''
+                        }`}
+                        style={{
+                          top,
+                          height: height - 2,
+                          backgroundColor: task.color + '20',
+                          borderColor: task.color,
+                          color: task.color,
+                        }}
+                      >
+                        <div className={`font-semibold truncate ${task.status === 'done' ? 'line-through' : ''}`}>{task.title}</div>
+                        <div className="text-[10px] opacity-70">📋 任务</div>
                       </div>
                     );
                   })}
@@ -762,6 +844,53 @@ export default function ScheduleView() {
               </button>
             )}
 
+              {/* Error messages */}
+              {formError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-sm text-red-600">
+                  {formError}
+                </div>
+              )}
+              {overlapWarning && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm space-y-2">
+                  <p className="text-orange-700">{overlapWarning}</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setOverlapWarning(null)} className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">
+                      取消
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setOverlapWarning(null);
+                        const data: any = {
+                          id: editing?.id,
+                          title: title.trim() || '未命名',
+                          dayOfWeek,
+                          startHour,
+                          startMinute,
+                          durationMinutes: duration,
+                          color,
+                          location: location.trim() || undefined,
+                          repeatDays: repeatDays.length > 0 ? repeatDays : undefined,
+                          startDate: repeatDays.length > 1 ? startDate || undefined : undefined,
+                          endDate: repeatDays.length > 1 ? endDate || undefined : undefined,
+                          status: editing?.status || 'todo',
+                          completedDates: editing?.completedDates || [],
+                        };
+                        if (editing?.id) {
+                          await db.lessons.update(editing.id, data);
+                        } else {
+                          await db.lessons.add(data);
+                        }
+                        setShowForm(false);
+                        loadLessons();
+                      }}
+                      className="flex-1 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-medium"
+                    >
+                      仍要保存
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-3 mt-4">
                 {editing && (
                   <button onClick={deleteLesson}
@@ -844,9 +973,9 @@ export default function ScheduleView() {
             </div>
 
               <div className="flex gap-3 mt-5">
-                <button onClick={saveTaskAsLesson}
+                <button onClick={saveTaskAsScheduled}
                         className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium">
-                  安排到日程表
+                  安排到课程表
                 </button>
               </div>
             </div>

@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react';
-import { db, type Habit, type HabitLog, formatLocalDate, todayLocal } from '../db';
+import { db, type Habit, type HabitLog, formatLocalDate, todayLocal, COLORS } from '../db';
 import { Plus, X, Trash2, ArrowLeft } from 'lucide-react';
-
-const COLORS = [
-  '#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#8B5CF6',
-  '#EC4899', '#06B6D4', '#F97316', '#84CC16', '#6366F1'
-];
 
 const FUN_QUOTES = [
   "不要骗自己哦～",
@@ -93,9 +88,9 @@ export default function HabitView() {
     loadData();
   }
 
-  // Generate last 30 days for the grid
+  // Generate last 35 days (5 weeks) for heatmap
   const days: { date: string; label: string; dayNum: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
+  for (let i = 34; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const ds = formatLocalDate(d);
@@ -104,6 +99,69 @@ export default function HabitView() {
       label: `${d.getMonth() + 1}/${d.getDate()}`,
       dayNum: d.getDate(),
     });
+  }
+  // Group into weeks (Mon-Sun)
+  const weeks: { date: string; label: string; dayNum: number }[][] = [];
+  let currentWeek: typeof days = [];
+  for (const day of days) {
+    const dow = new Date(day.date + 'T00:00:00').getDay(); // 0=Sun, 1=Mon...
+    const mondayBased = dow === 0 ? 6 : dow - 1; // 0=Mon, 6=Sun
+    if (mondayBased === 0 && currentWeek.length > 0) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+    currentWeek.push(day);
+  }
+  if (currentWeek.length > 0) weeks.push(currentWeek);
+
+  function getIntensity(habitId: number, date: string): string {
+    // Return hex alpha based on streak length around this date
+    const habitLogs = logs.filter(l => l.habitId === habitId).map(l => l.date).sort();
+    const idx = habitLogs.indexOf(date);
+    if (idx === -1) return '00';
+    // Count consecutive days including this one (backward)
+    let consecutive = 1;
+    for (let i = idx - 1; i >= 0; i--) {
+      const prev = new Date(habitLogs[i] + 'T00:00:00');
+      const curr = new Date(habitLogs[i + 1] + 'T00:00:00');
+      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff === 1) consecutive++;
+      else break;
+    }
+    if (consecutive >= 7) return 'FF';
+    if (consecutive >= 5) return 'CC';
+    if (consecutive >= 3) return '99';
+    if (consecutive >= 2) return '66';
+    return '44';
+  }
+
+  function calcStreak(habitId: number): number {
+    const dates = logs
+      .filter(l => l.habitId === habitId)
+      .map(l => l.date)
+      .sort();
+    if (dates.length === 0) return 0;
+
+    const dateSet = new Set(dates);
+    let streak = 0;
+    let checkDate = today;
+
+    // If today not logged, check yesterday
+    if (!dateSet.has(checkDate)) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yestStr = formatLocalDate(yesterday);
+      if (!dateSet.has(yestStr)) return 0;
+      checkDate = yestStr;
+    }
+
+    while (dateSet.has(checkDate)) {
+      streak++;
+      const d = new Date(checkDate);
+      d.setDate(d.getDate() - 1);
+      checkDate = formatLocalDate(d);
+    }
+    return streak;
   }
 
   return (
@@ -134,6 +192,7 @@ export default function HabitView() {
 
         {habits.map(habit => {
           const loggedToday = isLogged(habit.id!, today);
+          const streak = calcStreak(habit.id!);
           return (
             <div key={habit.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
               <div className="flex items-center justify-between mb-3">
@@ -144,8 +203,11 @@ export default function HabitView() {
                   </div>
                   <div>
                     <div className="font-semibold text-gray-900">{habit.name}</div>
-                    <div className="text-xs text-gray-400">
-                      {days.filter(d => isLogged(habit.id!, d.date)).length} / 30 天
+                    <div className="text-xs text-gray-400 flex items-center gap-2">
+                      <span>{days.filter(d => isLogged(habit.id!, d.date)).length} / 30 天</span>
+                      {streak > 0 && (
+                        <span className="text-orange-500 font-medium">🔥 {streak} 天连续</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -167,28 +229,36 @@ export default function HabitView() {
                 </div>
               </div>
 
-              {/* Mini calendar grid */}
-              <div className="grid grid-cols-15 gap-1">
-                {days.map(d => {
-                  const logged = isLogged(habit.id!, d.date);
-                  const isToday = d.date === today;
-                  return (
-                    <button
-                      key={d.date}
-                      onClick={() => toggleLog(habit.id!, d.date)}
-                      className="flex flex-col items-center"
-                    >
-                      <div
-                        className={`w-full aspect-square rounded-md ${isToday ? 'ring-2 ring-offset-1' : ''}`}
-                        style={{
-                          backgroundColor: logged ? habit.color : '#f3f4f6',
-                          boxShadow: isToday ? `0 0 0 2px white, 0 0 0 4px ${habit.color}` : undefined,
-                        }}
-                      />
-                      <span className="text-[9px] text-gray-400 mt-0.5">{d.dayNum}</span>
-                    </button>
-                  );
-                })}
+              {/* Heatmap - 7-day week layout */}
+              <div className="mt-2">
+                <div className="grid grid-cols-7 gap-1">
+                  {weeks.map((week, wi) =>
+                    week.map((day, di) => {
+                      const logged = isLogged(habit.id!, day.date);
+                      const isToday = day.date === today;
+                      const intensity = logged ? getIntensity(habit.id!, day.date) : 0;
+                      return (
+                        <button
+                          key={`${wi}-${di}`}
+                          onClick={() => toggleLog(habit.id!, day.date)}
+                          title={day.label}
+                          className="flex flex-col items-center"
+                        >
+                          <div
+                            className={`w-full aspect-square rounded-sm transition-all hover:scale-110 ${isToday ? 'ring-2 ring-offset-1' : ''}`}
+                            style={{
+                              backgroundColor: logged ? `${habit.color}${intensity}` : '#f3f4f6',
+                              boxShadow: isToday ? `0 0 0 2px white, 0 0 0 4px ${habit.color}` : undefined,
+                            }}
+                          />
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                <div className="flex justify-between text-[9px] text-gray-400 mt-1 px-0.5">
+                  {['一','二','三','四','五','六','日'].map(d => <span key={d}>{d}</span>)}
+                </div>
               </div>
             </div>
           );

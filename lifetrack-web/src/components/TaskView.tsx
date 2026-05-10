@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { db, type Task, type Goal } from '../db';
+import { db, type Task, type Goal, COLORS } from '../db';
 import { Plus, X, CheckCircle2, Circle, Clock, ArrowRight, Filter, Repeat, Zap, ArrowUpDown, ArrowLeft } from 'lucide-react';
 
-type FilterStatus = 'all' | 'todo' | 'in_progress' | 'done';
-type SortOrder = 'default' | 'priorityDesc' | 'priorityAsc';
+type FilterStatus = 'all' | 'todo' | 'in_progress' | 'done' | 'overdue';
+type SortOrder = 'default' | 'priorityDesc' | 'priorityAsc' | 'dueDateAsc';
 
 const STATUS_LABELS: Record<string, string> = {
+  all: '全部',
   todo: '待办',
   in_progress: '进行中',
   done: '已完成',
+  overdue: '已过期',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -33,12 +35,9 @@ const SORT_LABELS: Record<SortOrder, string> = {
   default: '默认排序',
   priorityDesc: '优先级 ↓',
   priorityAsc: '优先级 ↑',
+  dueDateAsc: '截止日期 ↑',
 };
 
-const COLORS = [
-  '#4A6FA5', '#FF6B6B', '#34C759', '#FF9500', '#AF52DE',
-  '#5856D6', '#FF2D55', '#5AC8FA', '#FFCC00', '#8E8E93'
-];
 
 export default function TaskView() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -48,6 +47,7 @@ export default function TaskView() {
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [showFilter, setShowFilter] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('default');
+  const [goalFilter, setGoalFilter] = useState<number | 'all'>('all');
 
   const [title, setTitle] = useState('');
   const [goalId, setGoalId] = useState<number | undefined>(undefined);
@@ -58,6 +58,13 @@ export default function TaskView() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [dueDate, setDueDate] = useState(''); // NEW: due date
+  const [description, setDescription] = useState(''); // NEW: task description
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const [showBatchGoalForm, setShowBatchGoalForm] = useState(false);
+  const [batchGoalId, setBatchGoalId] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     loadData();
@@ -84,6 +91,8 @@ export default function TaskView() {
       setIsRecurring(task.isRecurring);
       setStartDate(task.startDate || '');
       setEndDate(task.endDate || '');
+      setDueDate(task.dueDate || '');
+      setDescription(task.description || '');
     } else {
       setEditing(null);
       setTitle('');
@@ -95,20 +104,34 @@ export default function TaskView() {
       setIsRecurring(false);
       setStartDate('');
       setEndDate('');
+      setDueDate('');
+      setDescription('');
     }
     setShowForm(true);
   }
 
   async function saveTask() {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      alert('任务标题不能为空');
+      return;
+    }
+    if (trimmedTitle.length > 60) {
+      alert('任务标题不能超过60字');
+      return;
+    }
+
     const data = {
       id: editing?.id,
-      title: title.trim() || '未命名任务',
+      title: trimmedTitle || '未命名任务',
+      description: description.trim() || undefined,
       goalId: goalId || undefined,
       priority,
       status: editing?.status || 'todo',
       scheduleType,
       createdAt: editing?.createdAt || new Date().toISOString(),
       completedAt: editing?.completedAt,
+      dueDate: dueDate || undefined,
       color,
       isRecurring,
       startDate: isRecurring ? startDate || undefined : undefined,
@@ -148,11 +171,75 @@ export default function TaskView() {
     loadData();
   }
 
-  const filteredTasks = tasks.filter(t => filter === 'all' || t.status === filter);
+  // Batch operations
+  function toggleSelection(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAll() {
+    setSelectedIds(new Set(sortedTasks.map(t => t.id!)));
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function batchMarkDone() {
+    const ids = Array.from(selectedIds);
+    const now = new Date().toISOString();
+    for (const id of ids) {
+      await db.tasks.update(id, { status: 'done', completedAt: now });
+    }
+    setBatchMode(false);
+    clearSelection();
+    loadData();
+  }
+
+  async function batchDelete() {
+    if (!confirm(`确定删除选中的 ${selectedIds.size} 个任务吗？`)) return;
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      await db.tasks.delete(id);
+    }
+    setBatchMode(false);
+    clearSelection();
+    loadData();
+  }
+
+  async function batchAssignGoal() {
+    if (!batchGoalId) return;
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      await db.tasks.update(id, { goalId: batchGoalId });
+    }
+    setShowBatchGoalForm(false);
+    setBatchMode(false);
+    clearSelection();
+    loadData();
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const filteredTasks = tasks.filter(t => {
+    if (goalFilter !== 'all' && t.goalId !== goalFilter) return false;
+    if (filter === 'all') return true;
+    if (filter === 'overdue') return t.status !== 'done' && t.dueDate && t.dueDate < todayStr;
+    return t.status === filter;
+  });
 
   const sortedTasks = [...filteredTasks].sort((a, b) => {
     if (sortOrder === 'priorityDesc') return b.priority - a.priority;
     if (sortOrder === 'priorityAsc') return a.priority - b.priority;
+    if (sortOrder === 'dueDateAsc') {
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    }
     return 0;
   });
 
@@ -175,6 +262,21 @@ export default function TaskView() {
             <h1 className="text-lg font-bold">任务追踪</h1>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={() => {
+                if (batchMode) {
+                  setBatchMode(false);
+                  clearSelection();
+                } else {
+                  setBatchMode(true);
+                }
+              }}
+              className={`p-2 rounded-full text-sm font-medium transition-colors ${
+                batchMode ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              {batchMode ? '完成' : '批量'}
+            </button>
             <button onClick={() => setShowFilter(!showFilter)} className="p-2 text-gray-500">
               <Filter size={18} />
             </button>
@@ -195,16 +297,29 @@ export default function TaskView() {
         {/* Filter & Sort chips */}
         {showFilter && (
           <div className="flex flex-wrap gap-2 mt-2">
-            {(['all', 'todo', 'in_progress', 'done'] as FilterStatus[]).map(f => (
+            {/* Goal filter */}
+            {goals.length > 0 && (
+              <select
+                value={goalFilter}
+                onChange={(e) => setGoalFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                className="px-2 py-1 rounded-full text-xs font-medium bg-white border border-gray-200 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              >
+                <option value="all">全部目标</option>
+                {goals.map(g => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+              </select>
+            )}
+            {(['all', 'todo', 'in_progress', 'done', 'overdue'] as FilterStatus[]).map(f => (
               <button key={f} onClick={() => setFilter(f)}
                       className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                         filter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
                       }`}>
-                {f === 'all' ? '全部' : STATUS_LABELS[f]}
+                {STATUS_LABELS[f]}
               </button>
             ))}
             <button onClick={() => {
-              const orders: SortOrder[] = ['default', 'priorityDesc', 'priorityAsc'];
+              const orders: SortOrder[] = ['default', 'priorityDesc', 'priorityAsc', 'dueDateAsc'];
               const idx = orders.indexOf(sortOrder);
               setSortOrder(orders[(idx + 1) % orders.length]);
             }}
@@ -226,26 +341,55 @@ export default function TaskView() {
 
         {sortedTasks.map(task => {
           const goal = goals.find(g => g.id === task.goalId);
+          const isSelected = selectedIds.has(task.id!);
+          const PRIORITY_BAR_COLORS: Record<string, string> = {
+            P3: '#EF4444',
+            P2: '#F59E0B',
+            P1: '#9CA3AF',
+          };
           return (
             <div key={task.id}
-                 className={`bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-start gap-3 ${task.status === 'done' ? 'opacity-60' : ''}`}>
-              <button onClick={() => toggleStatus(task)} className="mt-0.5 shrink-0">
-                {task.status === 'done' ? (
-                  <CheckCircle2 size={22} className="text-green-500" />
-                ) : task.status === 'in_progress' ? (
-                  <Clock size={22} className="text-blue-500" />
-                ) : (
-                  <Circle size={22} className="text-gray-300" />
-                )}
-              </button>
+                 className={`bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-start gap-3 ${task.status === 'done' ? 'opacity-60' : ''} ${isSelected ? 'ring-2 ring-blue-400' : ''}`}
+                 style={{ borderLeftWidth: '3px', borderLeftColor: PRIORITY_BAR_COLORS[task.priority] || '#9CA3AF' }}>
+              {batchMode ? (
+                <button
+                  onClick={() => toggleSelection(task.id!)}
+                  className="mt-0.5 shrink-0"
+                >
+                  {isSelected ? (
+                    <CheckCircle2 size={22} className="text-blue-500" />
+                  ) : (
+                    <Circle size={22} className="text-gray-300" />
+                  )}
+                </button>
+              ) : (
+                <button onClick={() => toggleStatus(task)} className="mt-0.5 shrink-0">
+                  {task.status === 'done' ? (
+                    <CheckCircle2 size={22} className="text-green-500" />
+                  ) : task.status === 'in_progress' ? (
+                    <Clock size={22} className="text-blue-500" />
+                  ) : (
+                    <Circle size={22} className="text-gray-300" />
+                  )}
+                </button>
+              )}
 
-              <button onClick={() => openForm(task)} className="flex-1 text-left min-w-0">
+              <button onClick={() => {
+                if (batchMode) {
+                  toggleSelection(task.id!);
+                } else {
+                  openForm(task);
+                }
+              }} className="flex-1 text-left min-w-0">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: task.color }} />
                   <div className={`font-medium ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                     {task.title}
                   </div>
                 </div>
+                {task.description && (
+                  <div className="text-xs text-gray-400 mt-1 line-clamp-2">{task.description}</div>
+                )}
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STATUS_COLORS[task.status]}`}>
                     {STATUS_LABELS[task.status]}
@@ -262,6 +406,17 @@ export default function TaskView() {
                       <Zap size={10} /> 单次
                     </span>
                   )}
+                  {task.dueDate && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex items-center gap-0.5 ${
+                      task.status === 'done' ? 'bg-gray-100 text-gray-400' :
+                      new Date(task.dueDate) < new Date(new Date().toISOString().split('T')[0]) ? 'bg-red-100 text-red-600' :
+                      task.dueDate === new Date().toISOString().split('T')[0] ? 'bg-orange-100 text-orange-600' :
+                      'bg-blue-100 text-blue-600'
+                    }`}>
+                      {new Date(task.dueDate) < new Date(new Date().toISOString().split('T')[0]) && task.status !== 'done' ? '⚠️ ' : '📅 '}
+                      {task.dueDate.slice(5)}
+                    </span>
+                  )}
                   {goal && (
                     <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
                       <ArrowRight size={10} />
@@ -274,6 +429,74 @@ export default function TaskView() {
           );
         })}
       </div>
+
+      {/* Batch action bar */}
+      {batchMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-4 left-4 right-4 z-40 bg-white rounded-xl shadow-lg border border-gray-200 p-3 flex items-center justify-between"
+             style={{ maxWidth: '500px', margin: '0 auto' }}>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">已选 {selectedIds.size} 项</span>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={selectAll} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200">
+              全选
+            </button>
+            <button onClick={clearSelection} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200">
+              清空
+            </button>
+            <button onClick={() => setShowBatchGoalForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
+              分配目标
+            </button>
+            <button onClick={batchMarkDone} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700">
+              标记完成
+            </button>
+            <button onClick={batchDelete} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700">
+              删除
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Goal Assignment Modal */}
+      {showBatchGoalForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center"
+             onClick={() => setShowBatchGoalForm(false)}>
+          <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-5 shadow-xl"
+               onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">分配目标（已选 {selectedIds.size} 项）</h2>
+              <button onClick={() => setShowBatchGoalForm(false)}><X size={20} className="text-gray-400" /></button>
+            </div>
+            <div className="space-y-3">
+              <select
+                value={batchGoalId || ''}
+                onChange={e => setBatchGoalId(e.target.value ? Number(e.target.value) : undefined)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">选择目标...</option>
+                {goals.map(g => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+              </select>
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={() => setShowBatchGoalForm(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-medium"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={batchAssignGoal}
+                  disabled={!batchGoalId}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium disabled:bg-gray-300"
+                >
+                  确认分配
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Form Modal */}
       {showForm && (
@@ -291,6 +514,17 @@ export default function TaskView() {
                 <label className="text-sm text-gray-500">任务名称</label>
                 <input value={title} onChange={e => setTitle(e.target.value)}
                        className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-500">备注（可选）</label>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder="添加任务详情、步骤、参考链接..."
+                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+                />
               </div>
 
               <div>
@@ -356,6 +590,16 @@ export default function TaskView() {
                              className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm" />
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* Due Date */}
+              <div>
+                <label className="text-sm text-gray-500">截止日期（可选）</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                       className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                {dueDate && new Date(dueDate) < new Date(new Date().toISOString().split('T')[0]) && (
+                  <p className="text-xs text-red-500 mt-1">⚠️ 截止日期已过</p>
                 )}
               </div>
 
