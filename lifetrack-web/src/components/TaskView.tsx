@@ -342,9 +342,15 @@ export default function TaskView() {
         {sortedTasks.map(task => {
           const goal = goals.find(g => g.id === task.goalId);
           const isSelected = selectedIds.has(task.id!);
+          const PRIORITY_BAR_COLORS: Record<string, string> = {
+            P3: '#EF4444',
+            P2: '#F59E0B',
+            P1: '#9CA3AF',
+          };
           return (
             <div key={task.id}
-                 className={`bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-start gap-3 ${task.status === 'done' ? 'opacity-60' : ''} ${isSelected ? 'ring-2 ring-blue-400' : ''}`}>
+                 className={`bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-start gap-3 ${task.status === 'done' ? 'opacity-60' : ''} ${isSelected ? 'ring-2 ring-blue-400' : ''}`}
+                 style={{ borderLeftWidth: '3px', borderLeftColor: PRIORITY_BAR_COLORS[task.priority] || '#9CA3AF' }}>
               {batchMode ? (
                 <button
                   onClick={() => toggleSelection(task.id!)}
