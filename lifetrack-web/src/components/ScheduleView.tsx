@@ -43,7 +43,28 @@ export default function ScheduleView() {
   const [showPomodoro, setShowPomodoro] = useState(false);
   const [pomodoroLesson, setPomodoroLesson] = useState<Lesson | null>(null);
   const [pomodoroDuration, setPomodoroDuration] = useState(25);
-  const [editingDate, setEditingDate] = useState<string | null>(null);
+  // ===== 重叠检测工具函数 =====
+  function lessonsOverlap(a: { dayOfWeek: number; startHour: number; startMinute: number; durationMinutes: number },
+                          b: { dayOfWeek: number; startHour: number; startMinute: number; durationMinutes: number }): boolean {
+    if (a.dayOfWeek !== b.dayOfWeek) return false;
+    const aStart = a.startHour * 60 + a.startMinute;
+    const aEnd = aStart + a.durationMinutes;
+    const bStart = b.startHour * 60 + b.startMinute;
+    const bEnd = bStart + b.durationMinutes;
+    return aStart < bEnd && bStart < aEnd;
+  }
+
+  function validateLesson(data: { title: string; startHour: number; startMinute: number; durationMinutes: number }): string | null {
+    if (!data.title.trim()) return '课程名称不能为空';
+    if (data.title.trim().length > 50) return '课程名称不能超过50字';
+    if (data.startHour < 0 || data.startHour > 23) return '开始时间无效';
+    if (data.startMinute !== 0 && data.startMinute !== 15 && data.startMinute !== 30 && data.startMinute !== 45) return '开始分钟只能为0、15、30、45';
+    if (data.durationMinutes <= 0 || data.durationMinutes > 480) return '时长必须在1分钟到8小时之间';
+    return null;
+  }
+
+  const [formError, setFormError] = useState<string | null>(null);
+  const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [dayOfWeek, setDayOfWeek] = useState(1);
@@ -154,6 +175,28 @@ export default function ScheduleView() {
       status: editing?.status || 'todo',
       completedDates: editing?.completedDates || [],
     };
+
+    // Validation
+    const error = validateLesson({ title: data.title, startHour, startMinute, durationMinutes: duration });
+    if (error) {
+      setFormError(error);
+      return;
+    }
+
+    // Overlap detection
+    const newLesson = { dayOfWeek, startHour, startMinute, durationMinutes: duration };
+    const conflicts = lessons.filter(l => l.id !== editing?.id && lessonsOverlap(
+      { dayOfWeek: l.dayOfWeek, startHour: l.startHour, startMinute: l.startMinute, durationMinutes: l.durationMinutes },
+      newLesson
+    ));
+    if (conflicts.length > 0) {
+      setOverlapWarning(`与「${conflicts[0].title}」时间重叠，确定保存吗？`);
+      return;
+    }
+
+    setFormError(null);
+    setOverlapWarning(null);
+
     if (editing?.id) {
       await db.lessons.update(editing.id, data);
       // Sync color across all lessons with the same title
@@ -761,6 +804,53 @@ export default function ScheduleView() {
                 {editing.completedDates?.includes(editingDate) ? '↩ 取消完成标记' : '✓ 标记这件事为已完成'}
               </button>
             )}
+
+              {/* Error messages */}
+              {formError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-sm text-red-600">
+                  {formError}
+                </div>
+              )}
+              {overlapWarning && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm space-y-2">
+                  <p className="text-orange-700">{overlapWarning}</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setOverlapWarning(null)} className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">
+                      取消
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setOverlapWarning(null);
+                        const data: any = {
+                          id: editing?.id,
+                          title: title.trim() || '未命名',
+                          dayOfWeek,
+                          startHour,
+                          startMinute,
+                          durationMinutes: duration,
+                          color,
+                          location: location.trim() || undefined,
+                          repeatDays: repeatDays.length > 0 ? repeatDays : undefined,
+                          startDate: repeatDays.length > 1 ? startDate || undefined : undefined,
+                          endDate: repeatDays.length > 1 ? endDate || undefined : undefined,
+                          status: editing?.status || 'todo',
+                          completedDates: editing?.completedDates || [],
+                        };
+                        if (editing?.id) {
+                          await db.lessons.update(editing.id, data);
+                        } else {
+                          await db.lessons.add(data);
+                        }
+                        setShowForm(false);
+                        loadLessons();
+                      }}
+                      className="flex-1 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-medium"
+                    >
+                      仍要保存
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-3 mt-4">
                 {editing && (

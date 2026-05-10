@@ -100,9 +100,19 @@ export default function TaskView() {
   }
 
   async function saveTask() {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      alert('任务标题不能为空');
+      return;
+    }
+    if (trimmedTitle.length > 60) {
+      alert('任务标题不能超过60字');
+      return;
+    }
+
     const data = {
       id: editing?.id,
-      title: title.trim() || '未命名任务',
+      title: trimmedTitle || '未命名任务',
       goalId: goalId || undefined,
       priority,
       status: editing?.status || 'todo',

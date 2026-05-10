@@ -106,6 +106,35 @@ export default function HabitView() {
     });
   }
 
+  function calcStreak(habitId: number): number {
+    const dates = logs
+      .filter(l => l.habitId === habitId)
+      .map(l => l.date)
+      .sort();
+    if (dates.length === 0) return 0;
+
+    const dateSet = new Set(dates);
+    let streak = 0;
+    let checkDate = today;
+
+    // If today not logged, check yesterday
+    if (!dateSet.has(checkDate)) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yestStr = formatLocalDate(yesterday);
+      if (!dateSet.has(yestStr)) return 0;
+      checkDate = yestStr;
+    }
+
+    while (dateSet.has(checkDate)) {
+      streak++;
+      const d = new Date(checkDate);
+      d.setDate(d.getDate() - 1);
+      checkDate = formatLocalDate(d);
+    }
+    return streak;
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -134,6 +163,7 @@ export default function HabitView() {
 
         {habits.map(habit => {
           const loggedToday = isLogged(habit.id!, today);
+          const streak = calcStreak(habit.id!);
           return (
             <div key={habit.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
               <div className="flex items-center justify-between mb-3">
@@ -144,8 +174,11 @@ export default function HabitView() {
                   </div>
                   <div>
                     <div className="font-semibold text-gray-900">{habit.name}</div>
-                    <div className="text-xs text-gray-400">
-                      {days.filter(d => isLogged(habit.id!, d.date)).length} / 30 天
+                    <div className="text-xs text-gray-400 flex items-center gap-2">
+                      <span>{days.filter(d => isLogged(habit.id!, d.date)).length} / 30 天</span>
+                      {streak > 0 && (
+                        <span className="text-orange-500 font-medium">🔥 {streak} 天连续</span>
+                      )}
                     </div>
                   </div>
                 </div>
