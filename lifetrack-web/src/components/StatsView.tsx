@@ -325,7 +325,7 @@ export default function StatsView() {
             </div>
             <div className="text-center flex-1">
               <div className="text-2xl font-bold text-gray-900">
-                {thisWeekFocus.length > 0 ? Math.round(totalFocusMinutes / focusSessions.length) : 0}
+                {focusSessions.length > 0 ? Math.round(totalFocusMinutes / focusSessions.length) : 0}
               </div>
               <div className="text-xs text-gray-400">平均分钟</div>
             </div>
