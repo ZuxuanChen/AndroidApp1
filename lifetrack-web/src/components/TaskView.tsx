@@ -47,6 +47,7 @@ export default function TaskView() {
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [showFilter, setShowFilter] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('default');
+  const [goalFilter, setGoalFilter] = useState<number | 'all'>('all');
 
   const [title, setTitle] = useState('');
   const [goalId, setGoalId] = useState<number | undefined>(undefined);
@@ -163,6 +164,7 @@ export default function TaskView() {
 
   const todayStr = new Date().toISOString().split('T')[0];
   const filteredTasks = tasks.filter(t => {
+    if (goalFilter !== 'all' && t.goalId !== goalFilter) return false;
     if (filter === 'all') return true;
     if (filter === 'overdue') return t.status !== 'done' && t.dueDate && t.dueDate < todayStr;
     return t.status === filter;
@@ -219,6 +221,19 @@ export default function TaskView() {
         {/* Filter & Sort chips */}
         {showFilter && (
           <div className="flex flex-wrap gap-2 mt-2">
+            {/* Goal filter */}
+            {goals.length > 0 && (
+              <select
+                value={goalFilter}
+                onChange={(e) => setGoalFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                className="px-2 py-1 rounded-full text-xs font-medium bg-white border border-gray-200 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              >
+                <option value="all">全部目标</option>
+                {goals.map(g => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+              </select>
+            )}
             {(['all', 'todo', 'in_progress', 'done', 'overdue'] as FilterStatus[]).map(f => (
               <button key={f} onClick={() => setFilter(f)}
                       className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
