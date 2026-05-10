@@ -63,6 +63,9 @@ export default function TaskView() {
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
+  const [showBatchGoalForm, setShowBatchGoalForm] = useState(false);
+  const [batchGoalId, setBatchGoalId] = useState<number | undefined>(undefined);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -203,6 +206,18 @@ export default function TaskView() {
     for (const id of ids) {
       await db.tasks.delete(id);
     }
+    setBatchMode(false);
+    clearSelection();
+    loadData();
+  }
+
+  async function batchAssignGoal() {
+    if (!batchGoalId) return;
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      await db.tasks.update(id, { goalId: batchGoalId });
+    }
+    setShowBatchGoalForm(false);
     setBatchMode(false);
     clearSelection();
     loadData();
@@ -423,12 +438,56 @@ export default function TaskView() {
             <button onClick={clearSelection} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200">
               清空
             </button>
+            <button onClick={() => setShowBatchGoalForm(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
+              分配目标
+            </button>
             <button onClick={batchMarkDone} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700">
               标记完成
             </button>
             <button onClick={batchDelete} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700">
               删除
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Goal Assignment Modal */}
+      {showBatchGoalForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center"
+             onClick={() => setShowBatchGoalForm(false)}>
+          <div className="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-5 shadow-xl"
+               onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">分配目标（已选 {selectedIds.size} 项）</h2>
+              <button onClick={() => setShowBatchGoalForm(false)}><X size={20} className="text-gray-400" /></button>
+            </div>
+            <div className="space-y-3">
+              <select
+                value={batchGoalId || ''}
+                onChange={e => setBatchGoalId(e.target.value ? Number(e.target.value) : undefined)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">选择目标...</option>
+                {goals.map(g => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+              </select>
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={() => setShowBatchGoalForm(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-medium"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={batchAssignGoal}
+                  disabled={!batchGoalId}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-medium disabled:bg-gray-300"
+                >
+                  确认分配
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
