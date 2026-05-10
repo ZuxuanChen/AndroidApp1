@@ -1,3 +1,11 @@
+## v0.11.0 — 任务备注字段
+- **Feature**: Task 模型新增 `description`（备注）字段
+- **UX**: `TaskView` 表单新增「备注」textarea
+  - 3 行高度，placeholder 提示添加详情、步骤、参考链接
+  - 保存时自动 trim，空值转为 undefined（不存储空字符串）
+- **UX**: 任务卡片显示备注摘要（最多 2 行，灰色小号字）
+- **UX**: `SearchOverlay` 全局搜索现在也匹配任务备注内容
+
 ## v0.10.0 — 习惯打卡热力图
 - **Feature**: `HabitView` 习惯卡片升级热力图可视化
   - 7 列 x 5 行周布局（周一到周日），符合日历阅读习惯

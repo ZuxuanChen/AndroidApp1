@@ -25,6 +25,7 @@ export interface Task {
   id?: number;
   goalId?: number;
   title: string;
+  description?: string; // NEW: task notes/details
   status: TaskStatus;
   priority: number; // 1-3
   scheduleType: TaskScheduleType;

@@ -68,7 +68,9 @@ export default function SearchOverlay({ onNavigate, onClose }: Props) {
     const matched: SearchResult[] = [];
 
     tasks.forEach(t => {
-      if (t.title.toLowerCase().includes(q)) {
+      const inTitle = t.title.toLowerCase().includes(q);
+      const inDesc = t.description?.toLowerCase().includes(q);
+      if (inTitle || inDesc) {
         matched.push({
           type: 'task', title: t.title, tab: 'task', id: t.id,
           subtitle: t.status === 'done' ? '已完成' : t.dueDate ? `截止: ${t.dueDate.slice(5)}` : undefined,

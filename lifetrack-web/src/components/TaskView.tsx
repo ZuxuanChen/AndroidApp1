@@ -59,6 +59,7 @@ export default function TaskView() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [dueDate, setDueDate] = useState(''); // NEW: due date
+  const [description, setDescription] = useState(''); // NEW: task description
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -88,6 +89,7 @@ export default function TaskView() {
       setStartDate(task.startDate || '');
       setEndDate(task.endDate || '');
       setDueDate(task.dueDate || '');
+      setDescription(task.description || '');
     } else {
       setEditing(null);
       setTitle('');
@@ -100,6 +102,7 @@ export default function TaskView() {
       setStartDate('');
       setEndDate('');
       setDueDate('');
+      setDescription('');
     }
     setShowForm(true);
   }
@@ -118,6 +121,7 @@ export default function TaskView() {
     const data = {
       id: editing?.id,
       title: trimmedTitle || '未命名任务',
+      description: description.trim() || undefined,
       goalId: goalId || undefined,
       priority,
       status: editing?.status || 'todo',
@@ -362,6 +366,9 @@ export default function TaskView() {
                     {task.title}
                   </div>
                 </div>
+                {task.description && (
+                  <div className="text-xs text-gray-400 mt-1 line-clamp-2">{task.description}</div>
+                )}
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STATUS_COLORS[task.status]}`}>
                     {STATUS_LABELS[task.status]}
@@ -442,6 +449,17 @@ export default function TaskView() {
                 <label className="text-sm text-gray-500">任务名称</label>
                 <input value={title} onChange={e => setTitle(e.target.value)}
                        className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-500">备注（可选）</label>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder="添加任务详情、步骤、参考链接..."
+                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+                />
               </div>
 
               <div>
